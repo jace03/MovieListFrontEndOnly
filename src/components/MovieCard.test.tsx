@@ -74,16 +74,6 @@ describe('MovieCard', () => {
     expect(screen.queryByText('1980s')).not.toBeInTheDocument()
   })
 
-  it('shows "☆ No star rating" when rating is 0', () => {
-    renderCard({ rating: 0 })
-    expect(screen.getByText('☆ No star rating')).toBeInTheDocument()
-  })
-
-  it('shows the rating out of 10 when rating is above 0', () => {
-    renderCard({ rating: 7 })
-    expect(screen.getByText('⭐ 7/10')).toBeInTheDocument()
-  })
-
   it('joins cast names with commas', () => {
     renderCard({ cast: ['Winona Ryder', 'Michael Keaton'] })
     expect(screen.getByText('Cast: Winona Ryder, Michael Keaton')).toBeInTheDocument()

@@ -129,8 +129,6 @@ export function MovieCard({
           {movie.decade && <span className="tag">{movie.decade}</span>}
         </div>
 
-        <div className="rating">{movie.rating > 0 ? `⭐ ${movie.rating}/10` : '☆ No star rating'}</div>
-
         {!!movie.cast?.length && <p className="cast">Cast: {movie.cast.join(', ')}</p>}
 
         {movie.notes && <p className="notes">{movie.notes}</p>}
