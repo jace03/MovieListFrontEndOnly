@@ -1,3 +1,5 @@
+export type Holiday = 'Halloween' | 'Christmas'
+
 export interface Movie {
   id: string
   title: string
@@ -6,6 +8,7 @@ export interface Movie {
   rating: number
   genre: string
   decade: string
+  holiday: Holiday
   rank: number | null
   watched: boolean
   notes: string
@@ -25,6 +28,7 @@ export interface MovieRow {
   rating: number
   genre: string | null
   decade: string | null
+  holiday: Holiday
   rank: number | null
   watched: boolean
   notes: string

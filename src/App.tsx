@@ -5,11 +5,11 @@ import { MovieCard } from './components/MovieCard'
 import { MovieForm } from './components/MovieForm'
 import { useMovies } from './hooks/useMovies'
 import type { MovieSuggestion } from './lib/tmdb'
-import type { Movie, MovieDraft } from './types'
+import type { Holiday, Movie, MovieDraft } from './types'
 
 type Filter = 'all' | 'watched' | 'unwatched'
 type Columns = 1 | 2 | 3 | 4
-type Tab = 'add' | 'actor'
+type Tab = 'add' | 'actor' | 'halloween' | 'christmas'
 
 const COLUMNS_STORAGE_KEY = 'movie-list-columns'
 
@@ -36,19 +36,28 @@ function App() {
   const [columns, setColumns] = useState<Columns>(loadStoredColumns)
   const [draggedId, setDraggedId] = useState<string | null>(null)
   const [overId, setOverId] = useState<string | null>(null)
+  const [navOpen, setNavOpen] = useState(false)
 
-  const dragEnabled = filter === 'all' && columns === 1
+  const holidayFilter: Holiday | null =
+    tab === 'halloween' ? 'Halloween' : tab === 'christmas' ? 'Christmas' : null
+  const dragEnabled = filter === 'all' && columns === 1 && holidayFilter !== null
 
   function handleColumnsChange(next: Columns) {
     setColumns(next)
     localStorage.setItem(COLUMNS_STORAGE_KEY, String(next))
   }
 
+  function handleTabSelect(next: Tab) {
+    setTab(next)
+    setNavOpen(false)
+  }
+
   const visibleMovies = useMemo(() => {
-    if (filter === 'watched') return movies.filter((m) => m.watched)
-    if (filter === 'unwatched') return movies.filter((m) => !m.watched)
-    return movies
-  }, [movies, filter])
+    const byHoliday = holidayFilter ? movies.filter((m) => m.holiday === holidayFilter) : movies
+    if (filter === 'watched') return byHoliday.filter((m) => m.watched)
+    if (filter === 'unwatched') return byHoliday.filter((m) => !m.watched)
+    return byHoliday
+  }, [movies, filter, holidayFilter])
 
   function handleSave(draft: MovieDraft, id: string | null) {
     if (id) {
@@ -94,7 +103,7 @@ function App() {
 
   function handleDrop(targetId: string) {
     if (draggedId && draggedId !== targetId) {
-      const ids = movies.map((m) => m.id)
+      const ids = visibleMovies.map((m) => m.id)
       const fromIndex = ids.indexOf(draggedId)
       const toIndex = ids.indexOf(targetId)
       if (fromIndex !== -1 && toIndex !== -1) {
@@ -119,33 +128,65 @@ function App() {
       </header>
 
       <main className="app-main">
-        {error && <p className="empty-state">Something went wrong talking to Supabase: {error}</p>}
+        {error && <p className="empty-state">Something went wrong talking to the server: {error}</p>}
 
-        <div className="tabs" role="tablist">
+        <nav className="tabs-nav">
           <button
             type="button"
-            role="tab"
-            aria-selected={tab === 'add'}
-            className={`tab-btn ${tab === 'add' ? 'active' : ''}`}
-            onClick={() => setTab('add')}
+            className="tabs-burger"
+            aria-expanded={navOpen}
+            aria-controls="main-tabs"
+            aria-label="Toggle navigation menu"
+            onClick={() => setNavOpen((open) => !open)}
           >
-            Add a movie
+            <span className="tabs-burger-icon" aria-hidden="true" />
+            Menu
           </button>
-          <button
-            type="button"
-            role="tab"
-            aria-selected={tab === 'actor'}
-            className={`tab-btn ${tab === 'actor' ? 'active' : ''}`}
-            onClick={() => setTab('actor')}
-          >
-            Search by actor
-          </button>
-        </div>
+          <div className={`tabs ${navOpen ? 'tabs-open' : ''}`} role="tablist" id="main-tabs">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'add'}
+              className={`tab-btn ${tab === 'add' ? 'active' : ''}`}
+              onClick={() => handleTabSelect('add')}
+            >
+              Add a movie
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'actor'}
+              className={`tab-btn ${tab === 'actor' ? 'active' : ''}`}
+              onClick={() => handleTabSelect('actor')}
+            >
+              Search by actor
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'halloween'}
+              className={`tab-btn ${tab === 'halloween' ? 'active' : ''}`}
+              onClick={() => handleTabSelect('halloween')}
+            >
+              Halloween
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'christmas'}
+              className={`tab-btn ${tab === 'christmas' ? 'active' : ''}`}
+              onClick={() => handleTabSelect('christmas')}
+            >
+              Christmas
+            </button>
+          </div>
+        </nav>
 
         <div hidden={tab !== 'add'}>
           <MovieForm
             editingMovie={editingMovie}
             prefill={prefill}
+            defaultHoliday={holidayFilter ?? 'Halloween'}
             onSave={handleSave}
             onCancel={() => setEditingMovie(null)}
           />

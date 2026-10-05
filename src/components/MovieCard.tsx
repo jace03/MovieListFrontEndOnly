@@ -89,7 +89,7 @@ export function MovieCard({
         />
       ) : (
         <div className="movie-poster movie-poster-placeholder" aria-hidden="true">
-          🎃
+          {movie.holiday === 'Christmas' ? '🎄' : '🎃'}
         </div>
       )}
 
@@ -106,12 +106,11 @@ export function MovieCard({
           </div>
         </div>
 
-        {(movie.genre || movie.decade) && (
-          <div className="tags">
-            {movie.genre && <span className="tag">{movie.genre}</span>}
-            {movie.decade && <span className="tag">{movie.decade}</span>}
-          </div>
-        )}
+        <div className="tags">
+          <span className={`tag tag-${movie.holiday.toLowerCase()}`}>{movie.holiday}</span>
+          {movie.genre && <span className="tag">{movie.genre}</span>}
+          {movie.decade && <span className="tag">{movie.decade}</span>}
+        </div>
 
         <div className="rating">{movie.rating > 0 ? `⭐ ${movie.rating}/10` : 'Not rated yet'}</div>
 

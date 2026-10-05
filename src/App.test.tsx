@@ -13,6 +13,7 @@ const movies: Movie[] = [
     rating: 5,
     genre: 'Fantasy',
     decade: '1990s',
+    holiday: 'Halloween',
     rank: null,
     watched: true,
     notes: '',
@@ -21,12 +22,13 @@ const movies: Movie[] = [
   },
   {
     id: '2',
-    title: 'Halloween',
+    title: 'Halloween Night',
     year: 1978,
     addedBy: 'His',
     rating: 4,
     genre: 'Horror',
     decade: '1970s',
+    holiday: 'Halloween',
     rank: null,
     watched: false,
     notes: '',
@@ -92,27 +94,27 @@ describe('App', () => {
   it('renders all movies by default', () => {
     render(<App />)
     expect(screen.getByText('Hocus Pocus')).toBeInTheDocument()
-    expect(screen.getByText('Halloween')).toBeInTheDocument()
+    expect(screen.getByText('Halloween Night')).toBeInTheDocument()
   })
 
   it('filters to unwatched movies', async () => {
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: 'Unwatched' }))
     expect(screen.queryByText('Hocus Pocus')).not.toBeInTheDocument()
-    expect(screen.getByText('Halloween')).toBeInTheDocument()
+    expect(screen.getByText('Halloween Night')).toBeInTheDocument()
   })
 
   it('filters to watched movies', async () => {
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: 'Watched' }))
     expect(screen.getByText('Hocus Pocus')).toBeInTheDocument()
-    expect(screen.queryByText('Halloween')).not.toBeInTheDocument()
+    expect(screen.queryByText('Halloween Night')).not.toBeInTheDocument()
   })
 
-  it('shows the supabase error message when present', () => {
+  it('shows the server error message when present', () => {
     setHookState({ error: 'timeout' })
     render(<App />)
-    expect(screen.getByText('Something went wrong talking to Supabase: timeout')).toBeInTheDocument()
+    expect(screen.getByText('Something went wrong talking to the server: timeout')).toBeInTheDocument()
   })
 
   it('calls addMovie when submitting the form in Add mode', async () => {
@@ -145,8 +147,9 @@ describe('App', () => {
     expect(screen.getByRole('heading', { name: 'Add a movie' })).toBeInTheDocument()
   })
 
-  it('makes cards draggable when the All filter is active', () => {
+  it('makes cards draggable when a holiday tab is active', async () => {
     render(<App />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Halloween' }))
     const items = screen.getAllByRole('listitem')
     expect(items[0]).toHaveAttribute('draggable', 'true')
     expect(items[1]).toHaveAttribute('draggable', 'true')
@@ -159,8 +162,9 @@ describe('App', () => {
     expect(items[0]).toHaveAttribute('draggable', 'false')
   })
 
-  it('reorders on drag-and-drop from the handle and calls reorderMovies with the new id order', () => {
+  it('reorders on drag-and-drop from the handle and calls reorderMovies with the new id order', async () => {
     render(<App />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Halloween' }))
     const items = screen.getAllByRole('listitem')
 
     startDragFromHandle(items[0])
@@ -185,6 +189,7 @@ describe('App', () => {
 
   it('clears drag state when the card being dragged is deleted mid-drag', async () => {
     render(<App />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Halloween' }))
     const items = screen.getAllByRole('listitem')
 
     startDragFromHandle(items[0])
