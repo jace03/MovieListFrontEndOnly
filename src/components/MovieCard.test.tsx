@@ -12,6 +12,7 @@ const baseMovie: Movie = {
   rating: 5,
   genre: 'Fantasy',
   decade: '1990s',
+  holiday: 'Halloween',
   rank: 2,
   watched: true,
   notes: 'Annual tradition.',

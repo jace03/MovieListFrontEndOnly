@@ -1,32 +1,42 @@
 import { useEffect, useState } from 'react'
 import { searchMovieSuggestions, type MovieSuggestion } from '../lib/tmdb'
-import type { Movie, MovieDraft } from '../types'
+import type { Holiday, Movie, MovieDraft } from '../types'
 
 const GENRE_SUGGESTIONS = ['Comedy', 'Horror', 'Fantasy', 'Thriller', 'Mystery', 'Rom-Com', 'Animation']
 const DECADE_SUGGESTIONS = ['1970s', '1980s', '1990s', '2000s', '2010s', '2020s']
 
-const emptyDraft: MovieDraft = {
-  title: '',
-  year: '',
-  addedBy: 'Both',
-  rating: 5,
-  genre: '',
-  decade: '',
-  rank: null,
-  watched: false,
-  notes: '',
-  posterUrl: '',
+function makeEmptyDraft(holiday: Holiday): MovieDraft {
+  return {
+    title: '',
+    year: '',
+    addedBy: 'Both',
+    rating: 5,
+    genre: '',
+    decade: '',
+    holiday,
+    rank: null,
+    watched: false,
+    notes: '',
+    posterUrl: '',
+  }
 }
 
 interface MovieFormProps {
   editingMovie: Movie | null
   prefill?: MovieSuggestion | null
+  defaultHoliday: Holiday
   onSave: (draft: MovieDraft, id: string | null) => void
   onCancel: () => void
 }
 
-export function MovieForm({ editingMovie, prefill = null, onSave, onCancel }: MovieFormProps) {
-  const [draft, setDraft] = useState<MovieDraft>(emptyDraft)
+export function MovieForm({
+  editingMovie,
+  prefill = null,
+  defaultHoliday,
+  onSave,
+  onCancel,
+}: MovieFormProps) {
+  const [draft, setDraft] = useState<MovieDraft>(() => makeEmptyDraft(defaultHoliday))
 
   const [suggestions, setSuggestions] = useState<MovieSuggestion[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -36,7 +46,7 @@ export function MovieForm({ editingMovie, prefill = null, onSave, onCancel }: Mo
       setDraft({ ...editingMovie, posterUrl: editingMovie.posterUrl ?? '' })
     } else if (prefill) {
       setDraft({
-        ...emptyDraft,
+        ...makeEmptyDraft(defaultHoliday),
         title: prefill.title,
         year: prefill.year,
         genre: prefill.genre,
@@ -44,11 +54,11 @@ export function MovieForm({ editingMovie, prefill = null, onSave, onCancel }: Mo
         posterUrl: prefill.posterUrl ?? '',
       })
     } else {
-      setDraft(emptyDraft)
+      setDraft(makeEmptyDraft(defaultHoliday))
     }
     setSuggestions([])
     setShowSuggestions(false)
-  }, [editingMovie, prefill])
+  }, [editingMovie, prefill, defaultHoliday])
 
   // Only search while the user is actively typing a title (not after picking a suggestion).
   useEffect(() => {
@@ -81,7 +91,7 @@ export function MovieForm({ editingMovie, prefill = null, onSave, onCancel }: Mo
     e.preventDefault()
     if (!draft.title.trim()) return
     onSave(draft, editingMovie?.id ?? null)
-    if (!editingMovie) setDraft(emptyDraft)
+    if (!editingMovie) setDraft(makeEmptyDraft(defaultHoliday))
   }
 
   return (
@@ -159,6 +169,18 @@ export function MovieForm({ editingMovie, prefill = null, onSave, onCancel }: Mo
             <option value="Both">Both</option>
             <option value="His">His</option>
             <option value="Hers">Hers</option>
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="holiday">Holiday</label>
+          <select
+            id="holiday"
+            value={draft.holiday}
+            onChange={(e) => setDraft({ ...draft, holiday: e.target.value as Holiday })}
+          >
+            <option value="Halloween">Halloween</option>
+            <option value="Christmas">Christmas</option>
           </select>
         </div>
 

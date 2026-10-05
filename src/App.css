@@ -89,10 +89,59 @@ textarea:focus {
   outline-offset: 1px;
 }
 
+.tabs-nav {
+  position: relative;
+  margin-bottom: 12px;
+}
+
+.tabs-burger {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  font: inherit;
+  font-weight: 600;
+  padding: 8px 14px;
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  width: 100%;
+}
+
+.tabs-burger-icon,
+.tabs-burger-icon::before,
+.tabs-burger-icon::after {
+  display: block;
+  width: 16px;
+  height: 2px;
+  background: currentColor;
+  border-radius: 1px;
+}
+
+.tabs-burger-icon {
+  position: relative;
+}
+
+.tabs-burger-icon::before,
+.tabs-burger-icon::after {
+  content: '';
+  position: absolute;
+  left: 0;
+}
+
+.tabs-burger-icon::before {
+  top: -5px;
+}
+
+.tabs-burger-icon::after {
+  top: 5px;
+}
+
 .tabs {
   display: flex;
   gap: 8px;
-  margin-bottom: 12px;
 }
 
 .tab-btn {
@@ -318,19 +367,18 @@ textarea {
 }
 
 @media (min-width: 561px) {
-  /* Each tier fits exactly N columns once there's room, but never lets a
-     column get thinner than its floor — fewer columns render instead,
-     so cards stay comfortably sized on medium widths instead of squeezing. */
+  /* A chosen column count is exact, not a ceiling — cards shrink to fit
+     rather than silently dropping to fewer columns on narrower widths. */
   .movie-list[data-columns='2'] {
-    grid-template-columns: repeat(auto-fit, minmax(max(300px, calc((100% - 12px) / 2)), 1fr));
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .movie-list[data-columns='3'] {
-    grid-template-columns: repeat(auto-fit, minmax(max(280px, calc((100% - 24px) / 3)), 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .movie-list[data-columns='4'] {
-    grid-template-columns: repeat(auto-fit, minmax(max(220px, calc((100% - 36px) / 4)), 1fr));
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .movie-list[data-columns='4'] .movie-card {
@@ -498,6 +546,16 @@ textarea {
   color: var(--text-muted);
 }
 
+.tag-halloween {
+  border-color: #d97706;
+  color: #d97706;
+}
+
+.tag-christmas {
+  border-color: #16a34a;
+  color: #16a34a;
+}
+
 .rating {
   margin: 8px 0 4px;
   font-size: 15px;
@@ -539,6 +597,33 @@ textarea {
 @media (max-width: 560px) {
   .app-header h1 {
     font-size: 26px;
+  }
+
+  .tabs-burger {
+    display: flex;
+  }
+
+  .tabs {
+    display: none;
+    flex-direction: column;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 10;
+    padding: 6px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  }
+
+  .tabs.tabs-open {
+    display: flex;
+  }
+
+  .tab-btn {
+    width: 100%;
   }
 
   .form-row-inline {

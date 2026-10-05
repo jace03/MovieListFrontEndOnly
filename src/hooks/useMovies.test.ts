@@ -2,22 +2,22 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import type { MovieRow } from '../types'
 
-const { supabase } = vi.hoisted(() => ({ supabase: { from: vi.fn() } }))
+const { api } = vi.hoisted(() => ({
+  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+}))
 const { fetchPosterUrl } = vi.hoisted(() => ({ fetchPosterUrl: vi.fn() }))
 
-vi.mock('../lib/supabaseClient', () => ({ supabase }))
+vi.mock('../lib/apiClient', () => ({ api }))
 vi.mock('../lib/tmdb', () => ({ fetchPosterUrl }))
 
 const { useMovies } = await import('./useMovies')
 
-type QueryResult = { data?: unknown; error?: unknown }
+function ok<T>(data: T) {
+  return { data, error: null }
+}
 
-function makeQuery(result: QueryResult) {
-  const q: Record<string, unknown> = { data: result.data ?? null, error: result.error ?? null }
-  for (const method of ['select', 'order', 'insert', 'update', 'delete', 'eq', 'not', 'single']) {
-    q[method] = vi.fn(() => q)
-  }
-  return q as typeof q & { [key: string]: ReturnType<typeof vi.fn> }
+function fail(message: string) {
+  return { data: null, error: { message } }
 }
 
 const row: MovieRow = {
@@ -28,6 +28,7 @@ const row: MovieRow = {
   rating: 5,
   genre: 'Fantasy',
   decade: '1990s',
+  holiday: 'Halloween',
   rank: null,
   watched: true,
   notes: 'Annual tradition.',
@@ -37,14 +38,18 @@ const row: MovieRow = {
 }
 
 beforeEach(() => {
-  supabase.from.mockReset()
+  api.get.mockReset()
+  api.post.mockReset()
+  api.put.mockReset()
+  api.patch.mockReset()
+  api.delete.mockReset()
   fetchPosterUrl.mockReset()
   fetchPosterUrl.mockResolvedValue(null)
 })
 
 describe('useMovies', () => {
   it('loads movies on mount, maps rows, and sorts cast names', async () => {
-    supabase.from.mockReturnValue(makeQuery({ data: [row], error: null }))
+    api.get.mockResolvedValue(ok([row]))
     const { result } = renderHook(() => useMovies())
     expect(result.current.loading).toBe(true)
 
@@ -59,6 +64,7 @@ describe('useMovies', () => {
         rating: 5,
         genre: 'Fantasy',
         decade: '1990s',
+        holiday: 'Halloween',
         rank: null,
         watched: true,
         notes: 'Annual tradition.',
@@ -70,7 +76,7 @@ describe('useMovies', () => {
 
   it('falls back to empty strings for null year/genre/decade and an empty cast array', async () => {
     const bareRow: MovieRow = { ...row, year: null, genre: null, decade: null, movie_actor: [] }
-    supabase.from.mockReturnValue(makeQuery({ data: [bareRow], error: null }))
+    api.get.mockResolvedValue(ok([bareRow]))
     const { result } = renderHook(() => useMovies())
 
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -78,7 +84,7 @@ describe('useMovies', () => {
   })
 
   it('sets an error message when the initial fetch fails', async () => {
-    supabase.from.mockReturnValue(makeQuery({ data: null, error: { message: 'network down' } }))
+    api.get.mockResolvedValue(fail('network down'))
     const { result } = renderHook(() => useMovies())
 
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -87,11 +93,11 @@ describe('useMovies', () => {
   })
 
   it('addMovie appends the newly inserted movie on success', async () => {
-    supabase.from.mockReturnValueOnce(makeQuery({ data: [], error: null }))
+    api.get.mockResolvedValue(ok([]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    supabase.from.mockReturnValueOnce(makeQuery({ data: row, error: null }))
+    api.post.mockResolvedValue(ok(row))
     await act(async () => {
       await result.current.addMovie({
         title: 'Hocus Pocus',
@@ -100,6 +106,7 @@ describe('useMovies', () => {
         rating: 5,
         genre: 'Fantasy',
         decade: '1990s',
+        holiday: 'Halloween',
         rank: null,
         watched: true,
         notes: 'Annual tradition.',
@@ -112,11 +119,11 @@ describe('useMovies', () => {
   })
 
   it('addMovie sets an error and leaves the list unchanged on failure', async () => {
-    supabase.from.mockReturnValueOnce(makeQuery({ data: [], error: null }))
+    api.get.mockResolvedValue(ok([]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    supabase.from.mockReturnValueOnce(makeQuery({ data: null, error: { message: 'insert failed' } }))
+    api.post.mockResolvedValue(fail('insert failed'))
     await act(async () => {
       await result.current.addMovie({
         title: 'Bad Movie',
@@ -125,6 +132,7 @@ describe('useMovies', () => {
         rating: 0,
         genre: '',
         decade: '',
+        holiday: 'Halloween',
         rank: null,
         watched: false,
         notes: '',
@@ -136,12 +144,11 @@ describe('useMovies', () => {
   })
 
   it('updateMovie applies the server response without shifting ranks for a normal edit', async () => {
-    supabase.from.mockReturnValueOnce(makeQuery({ data: [row], error: null }))
+    api.get.mockResolvedValue(ok([row]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    supabase.from.mockClear()
-    supabase.from.mockReturnValueOnce(makeQuery({ data: { ...row, title: 'New Title' }, error: null }))
+    api.put.mockResolvedValue(ok({ ...row, title: 'New Title' }))
     await act(async () => {
       await result.current.updateMovie('1', {
         title: 'New Title',
@@ -150,13 +157,14 @@ describe('useMovies', () => {
         rating: row.rating,
         genre: row.genre ?? '',
         decade: row.decade ?? '',
+        holiday: row.holiday,
         rank: row.rank,
         watched: row.watched,
         notes: row.notes,
       })
     })
 
-    expect(supabase.from).toHaveBeenCalledTimes(1)
+    expect(api.put).toHaveBeenCalledTimes(1)
     expect(result.current.movies[0].title).toBe('New Title')
     expect(result.current.error).toBeNull()
   })
@@ -165,14 +173,12 @@ describe('useMovies', () => {
     const rowA: MovieRow = { ...row, id: 'a', rank: 1 }
     const rowB: MovieRow = { ...row, id: 'b', rank: 2 }
     const rowC: MovieRow = { ...row, id: 'c', rank: 3 }
-    supabase.from.mockReturnValueOnce(makeQuery({ data: [rowA, rowB, rowC], error: null }))
+    api.get.mockResolvedValue(ok([rowA, rowB, rowC]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    supabase.from.mockReturnValueOnce(makeQuery({ data: { ...rowA, rank: null }, error: null }))
-    const updateB = makeQuery({ error: null })
-    const updateC = makeQuery({ error: null })
-    supabase.from.mockReturnValueOnce(updateB).mockReturnValueOnce(updateC)
+    api.put.mockResolvedValue(ok({ ...rowA, rank: null }))
+    api.patch.mockResolvedValue(ok(undefined))
 
     await act(async () => {
       await result.current.updateMovie('a', {
@@ -182,6 +188,7 @@ describe('useMovies', () => {
         rating: rowA.rating,
         genre: rowA.genre ?? '',
         decade: rowA.decade ?? '',
+        holiday: rowA.holiday,
         rank: null,
         watched: rowA.watched,
         notes: rowA.notes,
@@ -190,17 +197,17 @@ describe('useMovies', () => {
 
     const ranks = Object.fromEntries(result.current.movies.map((m) => [m.id, m.rank]))
     expect(ranks).toEqual({ a: null, b: 1, c: 2 })
-    expect(updateB.update).toHaveBeenCalledWith({ rank: 1 })
-    expect(updateC.update).toHaveBeenCalledWith({ rank: 2 })
+    expect(api.patch).toHaveBeenCalledWith('/movies/b', { rank: 1 })
+    expect(api.patch).toHaveBeenCalledWith('/movies/c', { rank: 2 })
     expect(result.current.error).toBeNull()
   })
 
   it('deleteMovie removes the movie from state on success', async () => {
-    supabase.from.mockReturnValueOnce(makeQuery({ data: [row], error: null }))
+    api.get.mockResolvedValue(ok([row]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    supabase.from.mockReturnValueOnce(makeQuery({ error: null }))
+    api.delete.mockResolvedValue(ok(undefined))
     await act(async () => {
       await result.current.deleteMovie('1')
     })
@@ -212,14 +219,12 @@ describe('useMovies', () => {
     const rowA: MovieRow = { ...row, id: 'a', rank: 1 }
     const rowB: MovieRow = { ...row, id: 'b', rank: 2 }
     const rowC: MovieRow = { ...row, id: 'c', rank: 3 }
-    supabase.from.mockReturnValueOnce(makeQuery({ data: [rowA, rowB, rowC], error: null }))
+    api.get.mockResolvedValue(ok([rowA, rowB, rowC]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    const deleteQuery = makeQuery({ error: null })
-    const updateB = makeQuery({ error: null })
-    const updateC = makeQuery({ error: null })
-    supabase.from.mockReturnValueOnce(deleteQuery).mockReturnValueOnce(updateB).mockReturnValueOnce(updateC)
+    api.delete.mockResolvedValue(ok(undefined))
+    api.patch.mockResolvedValue(ok(undefined))
 
     await act(async () => {
       await result.current.deleteMovie('a')
@@ -227,19 +232,19 @@ describe('useMovies', () => {
 
     const ranks = Object.fromEntries(result.current.movies.map((m) => [m.id, m.rank]))
     expect(ranks).toEqual({ b: 1, c: 2 })
-    expect(updateB.update).toHaveBeenCalledWith({ rank: 1 })
-    expect(updateC.update).toHaveBeenCalledWith({ rank: 2 })
+    expect(api.patch).toHaveBeenCalledWith('/movies/b', { rank: 1 })
+    expect(api.patch).toHaveBeenCalledWith('/movies/c', { rank: 2 })
     expect(result.current.error).toBeNull()
   })
 
   it('deleteMovie does not shift ranks when the deleted movie was unranked', async () => {
     const rowA: MovieRow = { ...row, id: 'a', rank: 1 }
     const rowB: MovieRow = { ...row, id: 'b', rank: null }
-    supabase.from.mockReturnValueOnce(makeQuery({ data: [rowA, rowB], error: null }))
+    api.get.mockResolvedValue(ok([rowA, rowB]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    supabase.from.mockReturnValueOnce(makeQuery({ error: null }))
+    api.delete.mockResolvedValue(ok(undefined))
     await act(async () => {
       await result.current.deleteMovie('b')
     })
@@ -250,14 +255,12 @@ describe('useMovies', () => {
   it('deleteMovie surfaces an error and re-fetches if closing the rank gap fails to persist', async () => {
     const rowA: MovieRow = { ...row, id: 'a', rank: 1 }
     const rowB: MovieRow = { ...row, id: 'b', rank: 2 }
-    supabase.from.mockReturnValueOnce(makeQuery({ data: [rowA, rowB], error: null }))
+    api.get.mockResolvedValueOnce(ok([rowA, rowB])).mockResolvedValueOnce(ok([rowB]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    const deleteQuery = makeQuery({ error: null })
-    const failedUpdate = makeQuery({ error: { message: 'update failed' } })
-    const refreshQuery = makeQuery({ data: [{ ...rowB }], error: null })
-    supabase.from.mockReturnValueOnce(deleteQuery).mockReturnValueOnce(failedUpdate).mockReturnValueOnce(refreshQuery)
+    api.delete.mockResolvedValue(ok(undefined))
+    api.patch.mockResolvedValue(fail('update failed'))
 
     await act(async () => {
       await result.current.deleteMovie('a')
@@ -268,11 +271,11 @@ describe('useMovies', () => {
   })
 
   it('toggleWatched flips the watched flag returned by the server', async () => {
-    supabase.from.mockReturnValueOnce(makeQuery({ data: [row], error: null }))
+    api.get.mockResolvedValue(ok([row]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    supabase.from.mockReturnValueOnce(makeQuery({ data: { ...row, watched: false }, error: null }))
+    api.patch.mockResolvedValue(ok({ ...row, watched: false }))
     await act(async () => {
       await result.current.toggleWatched('1')
     })
@@ -281,29 +284,26 @@ describe('useMovies', () => {
   })
 
   it('toggleWatched is a no-op for an unknown id', async () => {
-    supabase.from.mockReturnValueOnce(makeQuery({ data: [row], error: null }))
+    api.get.mockResolvedValue(ok([row]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    supabase.from.mockClear()
+    api.patch.mockClear()
     await act(async () => {
       await result.current.toggleWatched('does-not-exist')
     })
 
-    expect(supabase.from).not.toHaveBeenCalled()
+    expect(api.patch).not.toHaveBeenCalled()
   })
 
   it('reorderMovies recomputes sequential ranks and persists them per-row', async () => {
     const rowA: MovieRow = { ...row, id: 'a', rank: null }
     const rowB: MovieRow = { ...row, id: 'b', rank: null }
-    supabase.from.mockReturnValueOnce(makeQuery({ data: [rowA, rowB], error: null }))
+    api.get.mockResolvedValue(ok([rowA, rowB]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    const updateB = makeQuery({ error: null })
-    const updateA = makeQuery({ error: null })
-    supabase.from.mockReturnValueOnce(updateB).mockReturnValueOnce(updateA)
-
+    api.patch.mockResolvedValue(ok(undefined))
     await act(async () => {
       await result.current.reorderMovies(['b', 'a'])
     })
@@ -311,21 +311,19 @@ describe('useMovies', () => {
     expect(result.current.movies.map((m) => m.id)).toEqual(['b', 'a'])
     expect(result.current.movies[0].rank).toBe(1)
     expect(result.current.movies[1].rank).toBe(2)
-    expect(updateB.update).toHaveBeenCalledWith({ rank: 1 })
-    expect(updateA.update).toHaveBeenCalledWith({ rank: 2 })
+    expect(api.patch).toHaveBeenCalledWith('/movies/b', { rank: 1 })
+    expect(api.patch).toHaveBeenCalledWith('/movies/a', { rank: 2 })
     expect(result.current.error).toBeNull()
   })
 
   it('reorderMovies reverts to the previous order and sets an error if a persist call fails', async () => {
     const rowA: MovieRow = { ...row, id: 'a', rank: 2 }
     const rowB: MovieRow = { ...row, id: 'b', rank: 1 }
-    supabase.from.mockReturnValueOnce(makeQuery({ data: [rowA, rowB], error: null }))
+    api.get.mockResolvedValue(ok([rowA, rowB]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    supabase.from
-      .mockReturnValueOnce(makeQuery({ error: null }))
-      .mockReturnValueOnce(makeQuery({ error: { message: 'update failed' } }))
+    api.patch.mockResolvedValueOnce(ok(undefined)).mockResolvedValueOnce(fail('update failed'))
 
     await act(async () => {
       await result.current.reorderMovies(['b', 'a'])
