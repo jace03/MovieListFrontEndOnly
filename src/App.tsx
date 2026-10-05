@@ -3,13 +3,14 @@ import './App.css'
 import { ActorSearch } from './components/ActorSearch'
 import { MovieCard } from './components/MovieCard'
 import { MovieForm } from './components/MovieForm'
+import { useHolidays } from './hooks/useHolidays'
 import { useMovies } from './hooks/useMovies'
 import type { MovieSuggestion } from './lib/tmdb'
 import type { Holiday, Movie, MovieDraft } from './types'
 
 type Filter = 'all' | 'watched' | 'unwatched'
 type Columns = 1 | 2 | 3 | 4
-type Tab = 'add' | 'actor' | 'halloween' | 'christmas'
+type Tab = 'all' | 'add' | 'actor' | `holiday:${Holiday}`
 
 const COLUMNS_STORAGE_KEY = 'movie-list-columns'
 
@@ -28,9 +29,11 @@ function App() {
     deleteMovie,
     toggleWatched,
     reorderMovies,
+    setMovieRank,
   } = useMovies()
+  const { holidays } = useHolidays()
   const [editingMovie, setEditingMovie] = useState<Movie | null>(null)
-  const [tab, setTab] = useState<Tab>('add')
+  const [tab, setTab] = useState<Tab>('all')
   const [prefill, setPrefill] = useState<MovieSuggestion | null>(null)
   const [filter, setFilter] = useState<Filter>('all')
   const [columns, setColumns] = useState<Columns>(loadStoredColumns)
@@ -38,8 +41,11 @@ function App() {
   const [overId, setOverId] = useState<string | null>(null)
   const [navOpen, setNavOpen] = useState(false)
 
-  const holidayFilter: Holiday | null =
-    tab === 'halloween' ? 'Halloween' : tab === 'christmas' ? 'Christmas' : null
+  const holidayFilter: Holiday | null = tab.startsWith('holiday:') ? tab.slice('holiday:'.length) : null
+  const emojiByHoliday = useMemo(
+    () => new Map(holidays.map((h) => [h.name, h.emoji])),
+    [holidays],
+  )
   const dragEnabled = filter === 'all' && columns === 1 && holidayFilter !== null
 
   function handleColumnsChange(next: Columns) {
@@ -53,7 +59,9 @@ function App() {
   }
 
   const visibleMovies = useMemo(() => {
-    const byHoliday = holidayFilter ? movies.filter((m) => m.holiday === holidayFilter) : movies
+    // Rank 1 on top, counting down; unranked (100) falls to the bottom.
+    const sorted = [...movies].sort((a, b) => a.rank - b.rank)
+    const byHoliday = holidayFilter ? sorted.filter((m) => m.holiday === holidayFilter) : sorted
     if (filter === 'watched') return byHoliday.filter((m) => m.watched)
     if (filter === 'unwatched') return byHoliday.filter((m) => !m.watched)
     return byHoliday
@@ -88,6 +96,10 @@ function App() {
     }
   }
 
+  function isRankTaken(rank: number, movieId: string) {
+    return movies.some((m) => m.id !== movieId && m.holiday === holidayFilter && m.rank === rank)
+  }
+
   function handleDragStart(id: string) {
     setDraggedId(id)
   }
@@ -110,7 +122,7 @@ function App() {
         const reorderedIds = [...ids]
         reorderedIds.splice(fromIndex, 1)
         reorderedIds.splice(toIndex, 0, draggedId)
-        reorderMovies(reorderedIds)
+        reorderMovies(reorderedIds, draggedId)
       }
     }
     handleDragEnd()
@@ -121,7 +133,7 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>🎃 Our Halloween Watchlist 👻</h1>
+        <h1>🎬 Our Movie Watchlist 🍿</h1>
         <p className="subtitle">
           {movies.length} movie{movies.length !== 1 ? 's' : ''} · {watchedCount} watched
         </p>
@@ -146,6 +158,15 @@ function App() {
             <button
               type="button"
               role="tab"
+              aria-selected={tab === 'all'}
+              className={`tab-btn ${tab === 'all' ? 'active' : ''}`}
+              onClick={() => handleTabSelect('all')}
+            >
+              All
+            </button>
+            <button
+              type="button"
+              role="tab"
               aria-selected={tab === 'add'}
               className={`tab-btn ${tab === 'add' ? 'active' : ''}`}
               onClick={() => handleTabSelect('add')}
@@ -161,24 +182,21 @@ function App() {
             >
               Search by actor
             </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === 'halloween'}
-              className={`tab-btn ${tab === 'halloween' ? 'active' : ''}`}
-              onClick={() => handleTabSelect('halloween')}
-            >
-              Halloween
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={tab === 'christmas'}
-              className={`tab-btn ${tab === 'christmas' ? 'active' : ''}`}
-              onClick={() => handleTabSelect('christmas')}
-            >
-              Christmas
-            </button>
+            {holidays.map((holiday) => {
+              const holidayTab: Tab = `holiday:${holiday.name}`
+              return (
+                <button
+                  key={holiday.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={tab === holidayTab}
+                  className={`tab-btn ${tab === holidayTab ? 'active' : ''}`}
+                  onClick={() => handleTabSelect(holidayTab)}
+                >
+                  {holiday.name}
+                </button>
+              )
+            })}
           </div>
         </nav>
 
@@ -186,7 +204,8 @@ function App() {
           <MovieForm
             editingMovie={editingMovie}
             prefill={prefill}
-            defaultHoliday={holidayFilter ?? 'Halloween'}
+            defaultHoliday={holidayFilter ?? holidays[0]?.name ?? ''}
+            holidays={holidays}
             onSave={handleSave}
             onCancel={() => setEditingMovie(null)}
           />
@@ -234,6 +253,10 @@ function App() {
                 <MovieCard
                   key={movie.id}
                   movie={movie}
+                  holidayEmoji={emojiByHoliday.get(movie.holiday)}
+                  showRank={holidayFilter !== null}
+                  isRankTaken={holidayFilter !== null ? isRankTaken : undefined}
+                  onRankChange={holidayFilter !== null ? setMovieRank : undefined}
                   onEdit={handleEdit}
                   onDelete={handleDelete}
                   onToggleWatched={toggleWatched}

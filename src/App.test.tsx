@@ -14,7 +14,7 @@ const movies: Movie[] = [
     genre: 'Fantasy',
     decade: '1990s',
     holiday: 'Halloween',
-    rank: null,
+    rank: 100,
     watched: true,
     notes: '',
     cast: [],
@@ -29,7 +29,7 @@ const movies: Movie[] = [
     genre: 'Horror',
     decade: '1970s',
     holiday: 'Halloween',
-    rank: null,
+    rank: 100,
     watched: false,
     notes: '',
     cast: [],
@@ -42,7 +42,17 @@ const updateMovie = vi.fn()
 const deleteMovie = vi.fn()
 const toggleWatched = vi.fn()
 const reorderMovies = vi.fn()
+const setMovieRank = vi.fn()
 const useMoviesMock = vi.fn()
+
+vi.mock('./hooks/useHolidays', () => ({
+  useHolidays: () => ({
+    holidays: [
+      { id: 1, name: 'Halloween', emoji: '🎃' },
+      { id: 2, name: 'Christmas', emoji: '🎄' },
+    ],
+  }),
+}))
 
 vi.mock('./hooks/useMovies', () => ({
   useMovies: () => useMoviesMock(),
@@ -58,6 +68,7 @@ function setHookState(overrides: Record<string, unknown> = {}) {
     deleteMovie,
     toggleWatched,
     reorderMovies,
+    setMovieRank,
     ...overrides,
   })
 }
@@ -119,6 +130,7 @@ describe('App', () => {
 
   it('calls addMovie when submitting the form in Add mode', async () => {
     render(<App />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Add a movie' }))
     await userEvent.type(screen.getByLabelText('Title'), 'Trick R Treat')
     await userEvent.click(screen.getByRole('button', { name: 'Add movie' }))
     expect(addMovie).toHaveBeenCalledWith(expect.objectContaining({ title: 'Trick R Treat' }))
@@ -155,6 +167,48 @@ describe('App', () => {
     expect(items[1]).toHaveAttribute('draggable', 'true')
   })
 
+  it('loads on the All tab with dragging disabled', () => {
+    render(<App />)
+    expect(screen.getByRole('tab', { name: 'All' })).toHaveAttribute('aria-selected', 'true')
+    const items = screen.getAllByRole('listitem')
+    expect(items[0]).toHaveAttribute('draggable', 'false')
+    expect(screen.queryByLabelText('Drag to reorder')).not.toBeInTheDocument()
+  })
+
+  it('hides rank badges on the All tab but shows them on a holiday tab', async () => {
+    setHookState({ movies: movies.map((m, i) => ({ ...m, rank: i + 1 })) })
+    render(<App />)
+    expect(screen.queryByText('#1')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Halloween' }))
+    expect(screen.getByText('#1')).toBeInTheDocument()
+  })
+
+  it('lets you click a rank on a holiday tab, flags taken ranks red and free ranks green, and saves on Enter', async () => {
+    setHookState({ movies: movies.map((m, i) => ({ ...m, rank: i + 1 })) })
+    render(<App />)
+    await userEvent.click(screen.getByRole('tab', { name: 'Halloween' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Rank 2, click to change' }))
+    const input = screen.getByLabelText('New rank')
+    await userEvent.clear(input)
+    await userEvent.type(input, '1')
+    expect(input).toHaveClass('rank-taken')
+
+    await userEvent.clear(input)
+    await userEvent.type(input, '5')
+    expect(input).toHaveClass('rank-free')
+
+    await userEvent.clear(input)
+    await userEvent.type(input, '1{Enter}')
+    expect(setMovieRank).toHaveBeenCalledWith('2', 1)
+  })
+
+  it('does not let you edit ranks on the All tab', () => {
+    setHookState({ movies: movies.map((m, i) => ({ ...m, rank: i + 1 })) })
+    render(<App />)
+    expect(screen.queryByRole('button', { name: /click to change/ })).not.toBeInTheDocument()
+  })
+
   it('disables dragging when a Watched/Unwatched filter is active', async () => {
     render(<App />)
     await userEvent.click(screen.getByRole('button', { name: 'Unwatched' }))
@@ -172,7 +226,7 @@ describe('App', () => {
     fireEvent.drop(items[1])
     fireEvent.dragEnd(items[1])
 
-    expect(reorderMovies).toHaveBeenCalledWith(['2', '1'])
+    expect(reorderMovies).toHaveBeenCalledWith(['2', '1'], '1')
   })
 
   it('does not start a drag from outside the handle', () => {

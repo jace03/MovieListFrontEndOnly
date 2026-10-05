@@ -1,8 +1,13 @@
 import { useRef } from 'react'
-import type { Movie } from '../types'
+import { UNRANKED, type Movie } from '../types'
+import { RankBadge } from './RankBadge'
 
 interface MovieCardProps {
   movie: Movie
+  holidayEmoji?: string
+  showRank?: boolean
+  isRankTaken?: (rank: number, movieId: string) => boolean
+  onRankChange?: (id: string, rank: number) => void
   onEdit: (movie: Movie) => void
   onDelete: (id: string) => void
   onToggleWatched: (id: string) => void
@@ -20,6 +25,10 @@ export function MovieCard({
   onEdit,
   onDelete,
   onToggleWatched,
+  holidayEmoji = '🎬',
+  showRank = true,
+  isRankTaken,
+  onRankChange,
   draggable = false,
   isDragging = false,
   isDropTarget = false,
@@ -89,14 +98,22 @@ export function MovieCard({
         />
       ) : (
         <div className="movie-poster movie-poster-placeholder" aria-hidden="true">
-          {movie.holiday === 'Christmas' ? '🎄' : '🎃'}
+          {holidayEmoji}
         </div>
       )}
 
       <div className="movie-card-body">
         <div className="movie-card-header">
           <div className="title-row">
-            {movie.rank !== null && <span className="badge badge-rank">#{movie.rank}</span>}
+            {onRankChange ? (
+              <RankBadge
+                rank={movie.rank}
+                isRankTaken={(rank) => isRankTaken?.(rank, movie.id) ?? false}
+                onRankChange={(rank) => onRankChange(movie.id, rank)}
+              />
+            ) : (
+              showRank && movie.rank < UNRANKED && <span className="badge badge-rank">#{movie.rank}</span>
+            )}
             <h3>
               {movie.title} {movie.year !== '' && <span className="year">({movie.year})</span>}
             </h3>
@@ -112,7 +129,7 @@ export function MovieCard({
           {movie.decade && <span className="tag">{movie.decade}</span>}
         </div>
 
-        <div className="rating">{movie.rating > 0 ? `⭐ ${movie.rating}/10` : 'Not rated yet'}</div>
+        <div className="rating">{movie.rating > 0 ? `⭐ ${movie.rating}/10` : '☆ No star rating'}</div>
 
         {!!movie.cast?.length && <p className="cast">Cast: {movie.cast.join(', ')}</p>}
 

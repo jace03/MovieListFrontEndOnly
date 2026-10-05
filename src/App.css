@@ -389,6 +389,7 @@ textarea {
   .movie-list[data-columns='4'] .movie-poster-placeholder {
     width: 100%;
     height: auto;
+    min-height: 0;
     aspect-ratio: 2 / 3;
   }
 }
@@ -450,8 +451,11 @@ textarea {
 
 .movie-poster {
   flex: none;
-  width: 84px;
-  height: 126px;
+  /* Stretch to the full card height so the poster meets the bottom edge. */
+  align-self: stretch;
+  width: 120px;
+  height: auto;
+  min-height: 126px;
   border-radius: 8px;
   object-fit: cover;
   background: var(--bg);
@@ -635,8 +639,9 @@ textarea {
   }
 
   .movie-poster {
-    width: 64px;
-    height: 96px;
+    width: 72px;
+    height: auto;
+    min-height: 96px;
   }
 
   .movie-poster-placeholder {
@@ -663,4 +668,30 @@ textarea {
 
 .movie-filter {
   margin-bottom: 10px;
+}
+
+.badge-rank-button {
+  border: none;
+  cursor: pointer;
+  font: inherit;
+}
+
+.rank-input {
+  width: 64px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 2px solid var(--border);
+  font: inherit;
+  font-weight: 600;
+  text-align: center;
+}
+
+.rank-input.rank-free {
+  border-color: #16a34a;
+  color: #16a34a;
+}
+
+.rank-input.rank-taken {
+  border-color: #dc2626;
+  color: #dc2626;
 }
