@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/apiClient'
 import { fetchPosterUrl } from '../lib/tmdb'
-import type { Movie, MovieDraft, MovieRow } from '../types'
+import { UNRANKED, type Movie, type MovieDraft, type MovieRow } from '../types'
+
+function byRank(a: Movie, b: Movie) {
+  return a.rank - b.rank
+}
 
 function normalizeRow(row: MovieRow): MovieRow {
   return { ...row, id: String(row.id) }
@@ -56,7 +60,7 @@ export function useMovies() {
       setError(fetchError.message)
     } else {
       setError(null)
-      setMovies((data ?? []).map(normalizeRow).map(rowToMovie))
+      setMovies((data ?? []).map(normalizeRow).map(rowToMovie).sort(byRank))
     }
     setLoading(false)
   }, [])
@@ -65,35 +69,48 @@ export function useMovies() {
     refresh()
   }, [refresh])
 
-  async function closeRankGap(currentMovies: Movie[], vacatedRank: number, holiday: Movie['holiday']) {
-    const toShift = currentMovies.filter(
-      (m): m is Movie & { rank: number } =>
-        m.rank !== null && m.rank > vacatedRank && m.holiday === holiday,
-    )
+  function rankedInOrder(list: Movie[], holiday: Movie['holiday'], excludeId?: string) {
+    return list
+      .filter((m) => m.holiday === holiday && m.rank < UNRANKED && m.id !== excludeId)
+      .sort((a, b) => a.rank - b.rank)
+  }
 
-    if (toShift.length === 0) {
+  // Applies new ranks to `base`, keeps the list sorted by rank, and saves only the movies whose
+  // rank actually changed. On failure it restores `revertTo`, or reloads from the server.
+  async function persistRanks(base: Movie[], rankById: Map<string, number>, revertTo?: Movie[]) {
+    const changed = base.filter((m) => rankById.has(m.id) && m.rank !== rankById.get(m.id))
+    const next = base
+      .map((m) => (rankById.has(m.id) ? { ...m, rank: rankById.get(m.id)! } : m))
+      .sort(byRank)
+    setMovies(next)
+
+    if (changed.length === 0) {
       setError(null)
-      setMovies(currentMovies)
       return
     }
 
-    const shiftedRankById = new Map(toShift.map((m) => [m.id, m.rank - 1]))
-    setMovies(
-      currentMovies.map((m) =>
-        shiftedRankById.has(m.id) ? { ...m, rank: shiftedRankById.get(m.id)! } : m,
-      ),
-    )
-
     const results = await Promise.all(
-      toShift.map((m) => api.patch(`/movies/${m.id}`, { rank: m.rank - 1 })),
+      changed.map((m) => api.patch(`/movies/${m.id}`, { rank: rankById.get(m.id) })),
     )
     const failed = results.find((r) => r.error)
     if (failed?.error) {
-      await refresh()
+      if (revertTo) {
+        setMovies(revertTo)
+      } else {
+        await refresh()
+      }
       setError(failed.error.message)
       return
     }
     setError(null)
+  }
+
+  // Renumbers a holiday's ranked movies 1..N so a vacated rank doesn't leave a gap.
+  async function closeRankGap(currentMovies: Movie[], holiday: Movie['holiday']) {
+    const rankById = new Map(
+      rankedInOrder(currentMovies, holiday).map((m, index) => [m.id, index + 1]),
+    )
+    await persistRanks(currentMovies, rankById)
   }
 
   async function addMovie(draft: MovieDraft) {
@@ -108,7 +125,7 @@ export function useMovies() {
       return
     }
     setError(null)
-    setMovies((prev) => [...prev, rowToMovie(normalizeRow(data as MovieRow))])
+    setMovies((prev) => [...prev, rowToMovie(normalizeRow(data as MovieRow))].sort(byRank))
   }
 
   async function updateMovie(id: string, draft: MovieDraft) {
@@ -130,10 +147,10 @@ export function useMovies() {
     }
 
     const updated = rowToMovie(normalizeRow(data as MovieRow))
-    const nextMovies = movies.map((m) => (m.id === id ? updated : m))
+    const nextMovies = movies.map((m) => (m.id === id ? updated : m)).sort(byRank)
 
-    if (previous?.rank != null && updated.rank === null) {
-      await closeRankGap(nextMovies, previous.rank, previous.holiday)
+    if (previous && previous.rank < UNRANKED && updated.rank >= UNRANKED) {
+      await closeRankGap(nextMovies, previous.holiday)
       return
     }
 
@@ -152,13 +169,13 @@ export function useMovies() {
 
     const remaining = movies.filter((m) => m.id !== id)
 
-    if (target?.rank == null) {
+    if (!target || target.rank >= UNRANKED) {
       setError(null)
       setMovies(remaining)
       return
     }
 
-    await closeRankGap(remaining, target.rank, target.holiday)
+    await closeRankGap(remaining, target.holiday)
   }
 
   async function toggleWatched(id: string) {
@@ -177,27 +194,37 @@ export function useMovies() {
     )
   }
 
-  async function reorderMovies(orderedIds: string[]) {
+  async function reorderMovies(orderedIds: string[], movedId?: string) {
     const previous = movies
-    const rankById = new Map(orderedIds.map((id, index) => [id, index + 1]))
-    const reordered = orderedIds
-      .map((id) => previous.find((m) => m.id === id))
-      .filter((m): m is Movie => !!m)
-
-    setMovies(reordered.map((m) => ({ ...m, rank: rankById.get(m.id) ?? m.rank })))
-
-    const results = await Promise.all(
-      orderedIds.map((id) => api.patch(`/movies/${id}`, { rank: rankById.get(id) })),
-    )
-    const failed = results.find((r) => r.error)
-    if (failed?.error) {
-      setError(failed.error.message)
-      setMovies(previous)
-      return
+    const rankById = new Map<string, number>()
+    let nextRank = 1
+    for (const id of orderedIds) {
+      const movie = previous.find((m) => m.id === id)
+      if (!movie) continue
+      // Only movies that were already ranked (and the one just dragged) take a spot.
+      rankById.set(id, movie.rank < UNRANKED || id === movedId ? nextRank++ : UNRANKED)
     }
-    setError(null)
+    await persistRanks(previous, rankById, previous)
   }
 
+  async function setMovieRank(id: string, requestedRank: number) {
+    const target = movies.find((m) => m.id === id)
+    if (!target) return
+
+    // Insert the movie at the requested spot among its holiday's ranked movies, then renumber
+    // from 1 so everything below it bumps down one. 100 (or more) means unranked.
+    const others = rankedInOrder(movies, target.holiday, id)
+    const rankById = new Map<string, number>()
+    if (requestedRank >= UNRANKED) {
+      others.forEach((m, index) => rankById.set(m.id, index + 1))
+      rankById.set(id, UNRANKED)
+    } else {
+      const insertAt = Math.min(Math.max(requestedRank, 1), others.length + 1) - 1
+      const ordered = [...others.slice(0, insertAt), target, ...others.slice(insertAt)]
+      ordered.forEach((m, index) => rankById.set(m.id, index + 1))
+    }
+    await persistRanks(movies, rankById, movies)
+  }
   return {
     movies,
     loading,
@@ -207,5 +234,6 @@ export function useMovies() {
     deleteMovie,
     toggleWatched,
     reorderMovies,
+    setMovieRank,
   }
 }

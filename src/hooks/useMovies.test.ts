@@ -29,7 +29,7 @@ const row: MovieRow = {
   genre: 'Fantasy',
   decade: '1990s',
   holiday: 'Halloween',
-  rank: null,
+  rank: 100,
   watched: true,
   notes: 'Annual tradition.',
   created_at: '2024-01-01',
@@ -65,7 +65,7 @@ describe('useMovies', () => {
         genre: 'Fantasy',
         decade: '1990s',
         holiday: 'Halloween',
-        rank: null,
+        rank: 100,
         watched: true,
         notes: 'Annual tradition.',
         posterUrl: null,
@@ -107,7 +107,7 @@ describe('useMovies', () => {
         genre: 'Fantasy',
         decade: '1990s',
         holiday: 'Halloween',
-        rank: null,
+        rank: 100,
         watched: true,
         notes: 'Annual tradition.',
       })
@@ -133,7 +133,7 @@ describe('useMovies', () => {
         genre: '',
         decade: '',
         holiday: 'Halloween',
-        rank: null,
+        rank: 100,
         watched: false,
         notes: '',
       })
@@ -177,7 +177,7 @@ describe('useMovies', () => {
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.put.mockResolvedValue(ok({ ...rowA, rank: null }))
+    api.put.mockResolvedValue(ok({ ...rowA, rank: 100 }))
     api.patch.mockResolvedValue(ok(undefined))
 
     await act(async () => {
@@ -189,14 +189,14 @@ describe('useMovies', () => {
         genre: rowA.genre ?? '',
         decade: rowA.decade ?? '',
         holiday: rowA.holiday,
-        rank: null,
+        rank: 100,
         watched: rowA.watched,
         notes: rowA.notes,
       })
     })
 
     const ranks = Object.fromEntries(result.current.movies.map((m) => [m.id, m.rank]))
-    expect(ranks).toEqual({ a: null, b: 1, c: 2 })
+    expect(ranks).toEqual({ a: 100, b: 1, c: 2 })
     expect(api.patch).toHaveBeenCalledWith('/movies/b', { rank: 1 })
     expect(api.patch).toHaveBeenCalledWith('/movies/c', { rank: 2 })
     expect(result.current.error).toBeNull()
@@ -239,7 +239,7 @@ describe('useMovies', () => {
 
   it('deleteMovie does not shift ranks when the deleted movie was unranked', async () => {
     const rowA: MovieRow = { ...row, id: 'a', rank: 1 }
-    const rowB: MovieRow = { ...row, id: 'b', rank: null }
+    const rowB: MovieRow = { ...row, id: 'b', rank: 100 }
     api.get.mockResolvedValue(ok([rowA, rowB]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -297,8 +297,8 @@ describe('useMovies', () => {
   })
 
   it('reorderMovies recomputes sequential ranks and persists them per-row', async () => {
-    const rowA: MovieRow = { ...row, id: 'a', rank: null }
-    const rowB: MovieRow = { ...row, id: 'b', rank: null }
+    const rowA: MovieRow = { ...row, id: 'a', rank: 1 }
+    const rowB: MovieRow = { ...row, id: 'b', rank: 2 }
     api.get.mockResolvedValue(ok([rowA, rowB]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -317,8 +317,8 @@ describe('useMovies', () => {
   })
 
   it('reorderMovies reverts to the previous order and sets an error if a persist call fails', async () => {
-    const rowA: MovieRow = { ...row, id: 'a', rank: 2 }
-    const rowB: MovieRow = { ...row, id: 'b', rank: 1 }
+    const rowA: MovieRow = { ...row, id: 'a', rank: 1 }
+    const rowB: MovieRow = { ...row, id: 'b', rank: 2 }
     api.get.mockResolvedValue(ok([rowA, rowB]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -331,5 +331,93 @@ describe('useMovies', () => {
 
     expect(result.current.movies.map((m) => m.id)).toEqual(['a', 'b'])
     expect(result.current.error).toBe('update failed')
+  })
+  it('setMovieRank inserts at the requested rank and bumps the others down, renumbering from 1', async () => {
+    const rows: MovieRow[] = [
+      { ...row, id: 'a', rank: 1 },
+      { ...row, id: 'b', rank: 2 },
+      { ...row, id: 'c', rank: 3 },
+    ]
+    api.get.mockResolvedValue(ok(rows))
+    const { result } = renderHook(() => useMovies())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    api.patch.mockResolvedValue(ok(undefined))
+    await act(async () => {
+      await result.current.setMovieRank('c', 1)
+    })
+
+    expect(result.current.movies.map((m) => [m.id, m.rank])).toEqual([
+      ['c', 1],
+      ['a', 2],
+      ['b', 3],
+    ])
+    expect(api.patch).toHaveBeenCalledTimes(3)
+  })
+
+  it('setMovieRank ranks an unranked movie and clamps to the end of the list', async () => {
+    const rows: MovieRow[] = [
+      { ...row, id: 'a', rank: 1 },
+      { ...row, id: 'b', rank: 100 },
+    ]
+    api.get.mockResolvedValue(ok(rows))
+    const { result } = renderHook(() => useMovies())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    api.patch.mockResolvedValue(ok(undefined))
+    await act(async () => {
+      await result.current.setMovieRank('b', 99)
+    })
+
+    expect(result.current.movies.map((m) => [m.id, m.rank])).toEqual([
+      ['a', 1],
+      ['b', 2],
+    ])
+    expect(api.patch).toHaveBeenCalledTimes(1)
+    expect(api.patch).toHaveBeenCalledWith('/movies/b', { rank: 2 })
+  })
+  it('setMovieRank with 100 unranks the movie and closes the gap without touching other unranked movies', async () => {
+    const rows: MovieRow[] = [
+      { ...row, id: 'a', rank: 1 },
+      { ...row, id: 'b', rank: 2 },
+      { ...row, id: 'c', rank: 100 },
+    ]
+    api.get.mockResolvedValue(ok(rows))
+    const { result } = renderHook(() => useMovies())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    api.patch.mockResolvedValue(ok(undefined))
+    await act(async () => {
+      await result.current.setMovieRank('a', 100)
+    })
+
+    expect(result.current.movies.map((m) => [m.id, m.rank])).toEqual([
+      ['b', 1],
+      ['a', 100],
+      ['c', 100],
+    ])
+    expect(api.patch).toHaveBeenCalledTimes(2)
+  })
+
+  it('reorderMovies ranks the dragged unranked movie but leaves other unranked movies at 100', async () => {
+    const rows: MovieRow[] = [
+      { ...row, id: 'a', rank: 1 },
+      { ...row, id: 'b', rank: 100 },
+      { ...row, id: 'c', rank: 100 },
+    ]
+    api.get.mockResolvedValue(ok(rows))
+    const { result } = renderHook(() => useMovies())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    api.patch.mockResolvedValue(ok(undefined))
+    await act(async () => {
+      await result.current.reorderMovies(['b', 'a', 'c'], 'b')
+    })
+
+    expect(result.current.movies.map((m) => [m.id, m.rank])).toEqual([
+      ['b', 1],
+      ['a', 2],
+      ['c', 100],
+    ])
   })
 })

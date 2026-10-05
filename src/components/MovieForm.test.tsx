@@ -13,7 +13,7 @@ const editingMovie: Movie = {
   genre: 'Fantasy',
   decade: '1980s',
   holiday: 'Halloween',
-  rank: null,
+  rank: 100,
   watched: true,
   notes: 'Great movie',
   cast: [],

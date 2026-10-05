@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { searchMovieSuggestions, type MovieSuggestion } from '../lib/tmdb'
-import type { Holiday, Movie, MovieDraft } from '../types'
+import { UNRANKED, type Holiday, type HolidayInfo, type Movie, type MovieDraft } from '../types'
 
 const GENRE_SUGGESTIONS = ['Comedy', 'Horror', 'Fantasy', 'Thriller', 'Mystery', 'Rom-Com', 'Animation']
 const DECADE_SUGGESTIONS = ['1970s', '1980s', '1990s', '2000s', '2010s', '2020s']
@@ -14,7 +14,7 @@ function makeEmptyDraft(holiday: Holiday): MovieDraft {
     genre: '',
     decade: '',
     holiday,
-    rank: null,
+    rank: UNRANKED,
     watched: false,
     notes: '',
     posterUrl: '',
@@ -25,6 +25,7 @@ interface MovieFormProps {
   editingMovie: Movie | null
   prefill?: MovieSuggestion | null
   defaultHoliday: Holiday
+  holidays?: HolidayInfo[]
   onSave: (draft: MovieDraft, id: string | null) => void
   onCancel: () => void
 }
@@ -33,10 +34,16 @@ export function MovieForm({
   editingMovie,
   prefill = null,
   defaultHoliday,
+  holidays = [],
   onSave,
   onCancel,
 }: MovieFormProps) {
   const [draft, setDraft] = useState<MovieDraft>(() => makeEmptyDraft(defaultHoliday))
+
+  // Keep the current value selectable even if the holiday list hasn't loaded yet.
+  const holidayOptions = Array.from(
+    new Set([...holidays.map((h) => h.name), defaultHoliday, draft.holiday].filter(Boolean)),
+  )
 
   const [suggestions, setSuggestions] = useState<MovieSuggestion[]>([])
   const [showSuggestions, setShowSuggestions] = useState(false)
@@ -177,10 +184,13 @@ export function MovieForm({
           <select
             id="holiday"
             value={draft.holiday}
-            onChange={(e) => setDraft({ ...draft, holiday: e.target.value as Holiday })}
+            onChange={(e) => setDraft({ ...draft, holiday: e.target.value as Holiday, rank: UNRANKED })}
           >
-            <option value="Halloween">Halloween</option>
-            <option value="Christmas">Christmas</option>
+            {holidayOptions.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -232,18 +242,6 @@ export function MovieForm({
           </datalist>
         </div>
 
-        <div>
-          <label htmlFor="rank">Favorite rank</label>
-          <input
-            id="rank"
-            type="number"
-            value={draft.rank ?? ''}
-            onChange={(e) =>
-              setDraft({ ...draft, rank: e.target.value === '' ? null : Number(e.target.value) })
-            }
-            placeholder="unranked"
-          />
-        </div>
       </div>
 
       <div className="form-row">

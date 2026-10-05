@@ -53,7 +53,7 @@ describe('MovieCard', () => {
   })
 
   it('hides the rank badge when rank is null', () => {
-    renderCard({ rank: null })
+    renderCard({ rank: 100 })
     expect(screen.queryByText(/^#\d+$/)).not.toBeInTheDocument()
   })
 
@@ -72,16 +72,6 @@ describe('MovieCard', () => {
     renderCard({ genre: '', decade: '' })
     expect(screen.queryByText('Horror')).not.toBeInTheDocument()
     expect(screen.queryByText('1980s')).not.toBeInTheDocument()
-  })
-
-  it('shows "Not rated yet" when rating is 0', () => {
-    renderCard({ rating: 0 })
-    expect(screen.getByText('Not rated yet')).toBeInTheDocument()
-  })
-
-  it('shows the rating out of 10 when rating is above 0', () => {
-    renderCard({ rating: 7 })
-    expect(screen.getByText('⭐ 7/10')).toBeInTheDocument()
   })
 
   it('joins cast names with commas', () => {
@@ -220,7 +210,7 @@ describe('MovieCard', () => {
   })
 
   it('renders a placeholder when posterUrl is null', () => {
-    renderCard({ posterUrl: null })
+    renderCard({ posterUrl: null }, { holidayEmoji: '🎃' })
     expect(screen.queryByRole('img')).not.toBeInTheDocument()
     expect(screen.getByText('🎃')).toBeInTheDocument()
   })

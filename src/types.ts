@@ -1,4 +1,13 @@
-export type Holiday = 'Halloween' | 'Christmas'
+export type Holiday = string
+
+/** Rank 1 is the top of a holiday's list; 100 means unranked and sorts last. */
+export const UNRANKED = 100
+
+export interface HolidayInfo {
+  id: number
+  name: Holiday
+  emoji: string
+}
 
 export interface Movie {
   id: string
@@ -9,7 +18,7 @@ export interface Movie {
   genre: string
   decade: string
   holiday: Holiday
-  rank: number | null
+  rank: number
   watched: boolean
   notes: string
   cast?: string[]
@@ -29,7 +38,7 @@ export interface MovieRow {
   genre: string | null
   decade: string | null
   holiday: Holiday
-  rank: number | null
+  rank: number
   watched: boolean
   notes: string
   created_at: string
