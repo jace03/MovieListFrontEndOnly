@@ -1,16 +1,20 @@
 import { useMemo, useState } from 'react'
 import './App.css'
 import { ActorSearch } from './components/ActorSearch'
+import { SettingsPage } from './components/SettingsPage'
+import { CalendarPlanner } from './components/CalendarPlanner'
 import { MovieCard } from './components/MovieCard'
 import { MovieForm } from './components/MovieForm'
+import { RankMovies } from './components/RankMovies'
 import { useHolidays } from './hooks/useHolidays'
 import { useMovies } from './hooks/useMovies'
+import { useWideViewport } from './hooks/useWideViewport'
 import type { MovieSuggestion } from './lib/tmdb'
 import type { Holiday, Movie, MovieDraft } from './types'
 
 type Filter = 'all' | 'watched' | 'unwatched'
 type Columns = 1 | 2 | 3 | 4
-type Tab = 'all' | 'add' | 'actor' | `holiday:${Holiday}`
+type Tab = 'all' | 'add' | 'actor' | 'rank' | 'calendar' | 'settings' | `holiday:${Holiday}`
 
 const COLUMNS_STORAGE_KEY = 'movie-list-columns'
 
@@ -28,10 +32,13 @@ function App() {
     updateMovie,
     deleteMovie,
     toggleWatched,
+    setWatchWindow,
+    autoCalculateCalendar,
+    clearCalendar,
     reorderMovies,
     setMovieRank,
   } = useMovies()
-  const { holidays } = useHolidays()
+  const { holidays, updateSlotCounts } = useHolidays()
   const [editingMovie, setEditingMovie] = useState<Movie | null>(null)
   const [tab, setTab] = useState<Tab>('all')
   const [prefill, setPrefill] = useState<MovieSuggestion | null>(null)
@@ -46,7 +53,11 @@ function App() {
     () => new Map(holidays.map((h) => [h.name, h.emoji])),
     [holidays],
   )
-  const dragEnabled = filter === 'all' && columns === 1 && holidayFilter !== null
+  const wide = useWideViewport()
+  // 3 and 4 columns only fit on wide viewports; narrower ones cap at 2.
+  const columnOptions: Columns[] = wide ? [1, 2, 3, 4] : [1, 2]
+  const activeColumns = Math.min(columns, columnOptions.length) as Columns
+  const dragEnabled = filter === 'all' && activeColumns === 1 && holidayFilter !== null
 
   function handleColumnsChange(next: Columns) {
     setColumns(next)
@@ -197,6 +208,33 @@ function App() {
                 </button>
               )
             })}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'rank'}
+              className={`tab-btn ${tab === 'rank' ? 'active' : ''}`}
+              onClick={() => handleTabSelect('rank')}
+            >
+              Rank Movies
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'calendar'}
+              className={`tab-btn ${tab === 'calendar' ? 'active' : ''}`}
+              onClick={() => handleTabSelect('calendar')}
+            >
+              Calendar
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === 'settings'}
+              className={`tab-btn ${tab === 'settings' ? 'active' : ''}`}
+              onClick={() => handleTabSelect('settings')}
+            >
+              Settings
+            </button>
           </div>
         </nav>
 
@@ -214,7 +252,29 @@ function App() {
           <ActorSearch onPick={handleActorPick} />
         </div>
 
-        <section className="list-section">
+        {tab === 'rank' && (
+          <RankMovies
+            movies={movies}
+            holidays={holidays}
+            onReorder={reorderMovies}
+            onSetRank={setMovieRank}
+          />
+        )}
+
+        {tab === 'calendar' && (
+          <CalendarPlanner
+            movies={movies}
+            holidays={holidays}
+            onToggleWatched={toggleWatched}
+            onMoveToWindow={setWatchWindow}
+            onAutoCalculate={autoCalculateCalendar}
+            onClear={clearCalendar}
+          />
+        )}
+
+        {tab === 'settings' && <SettingsPage holidays={holidays} onSave={updateSlotCounts} />}
+
+        <section className="list-section" hidden={tab === 'rank' || tab === 'calendar' || tab === 'settings'}>
           <div className="list-toolbar">
             <div className="filters">
               {(['all', 'unwatched', 'watched'] as Filter[]).map((f) => (
@@ -229,12 +289,12 @@ function App() {
               ))}
             </div>
             <div className="columns" role="group" aria-label="Columns">
-              {([1, 2, 3, 4] as Columns[]).map((count) => (
+              {columnOptions.map((count) => (
                 <button
                   key={count}
                   type="button"
-                  className={`filter-btn column-btn ${columns === count ? 'active' : ''}`}
-                  aria-pressed={columns === count}
+                  className={`filter-btn column-btn ${activeColumns === count ? 'active' : ''}`}
+                  aria-pressed={activeColumns === count}
                   onClick={() => handleColumnsChange(count)}
                 >
                   {count}
@@ -248,7 +308,7 @@ function App() {
           ) : visibleMovies.length === 0 ? (
             <p className="empty-state">No movies here yet — add one above!</p>
           ) : (
-            <ul className="movie-list" data-columns={columns}>
+            <ul className="movie-list" data-columns={activeColumns}>
               {visibleMovies.map((movie) => (
                 <MovieCard
                   key={movie.id}

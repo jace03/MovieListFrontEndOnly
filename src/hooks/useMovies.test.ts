@@ -30,6 +30,7 @@ const row: MovieRow = {
   decade: '1990s',
   holiday: 'Halloween',
   rank: 100,
+  watch_window: 'month_away',
   watched: true,
   notes: 'Annual tradition.',
   created_at: '2024-01-01',
@@ -66,6 +67,7 @@ describe('useMovies', () => {
         decade: '1990s',
         holiday: 'Halloween',
         rank: 100,
+        watchWindow: 'month_away',
         watched: true,
         notes: 'Annual tradition.',
         posterUrl: null,
@@ -108,6 +110,7 @@ describe('useMovies', () => {
         decade: '1990s',
         holiday: 'Halloween',
         rank: 100,
+        watchWindow: 'month_away',
         watched: true,
         notes: 'Annual tradition.',
       })
@@ -134,6 +137,7 @@ describe('useMovies', () => {
         decade: '',
         holiday: 'Halloween',
         rank: 100,
+        watchWindow: 'month_away',
         watched: false,
         notes: '',
       })
@@ -159,6 +163,7 @@ describe('useMovies', () => {
         decade: row.decade ?? '',
         holiday: row.holiday,
         rank: row.rank,
+        watchWindow: 'month_away',
         watched: row.watched,
         notes: row.notes,
       })
@@ -190,6 +195,7 @@ describe('useMovies', () => {
         decade: rowA.decade ?? '',
         holiday: rowA.holiday,
         rank: 100,
+        watchWindow: 'month_away',
         watched: rowA.watched,
         notes: rowA.notes,
       })
@@ -419,5 +425,33 @@ describe('useMovies', () => {
       ['a', 2],
       ['c', 100],
     ])
+  })
+
+  it('setWatchWindow moves the movie right away and saves it', async () => {
+    api.get.mockResolvedValue(ok([row]))
+    const { result } = renderHook(() => useMovies())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    api.patch.mockResolvedValue(ok({ ...row, watch_window: 'day_of' }))
+    await act(async () => {
+      await result.current.setWatchWindow('1', 'day_of')
+    })
+
+    expect(api.patch).toHaveBeenCalledWith('/movies/1', { watch_window: 'day_of' })
+    expect(result.current.movies[0].watchWindow).toBe('day_of')
+  })
+
+  it('setWatchWindow reverts and reports the error when saving fails', async () => {
+    api.get.mockResolvedValue(ok([row]))
+    const { result } = renderHook(() => useMovies())
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    api.patch.mockResolvedValue(fail('nope'))
+    await act(async () => {
+      await result.current.setWatchWindow('1', 'day_of')
+    })
+
+    expect(result.current.movies[0].watchWindow).toBe('month_away')
+    expect(result.current.error).toBe('nope')
   })
 })

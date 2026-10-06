@@ -15,6 +15,7 @@ function makeEmptyDraft(holiday: Holiday): MovieDraft {
     decade: '',
     holiday,
     rank: UNRANKED,
+    watchWindow: 'month_away',
     watched: false,
     notes: '',
     posterUrl: '',
