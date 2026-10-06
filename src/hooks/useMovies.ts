@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from '../lib/apiClient'
 import { fetchPosterUrl } from '../lib/tmdb'
-import { UNRANKED, type Movie, type MovieDraft, type MovieRow } from '../types'
+import { UNRANKED, type Movie, type MovieDraft, type MovieRow, type WatchWindow } from '../types'
 
 function byRank(a: Movie, b: Movie) {
   return a.rank - b.rank
@@ -22,6 +22,7 @@ function rowToMovie(row: MovieRow): Movie {
     decade: row.decade ?? '',
     holiday: row.holiday,
     rank: row.rank,
+    watchWindow: row.watch_window ?? 'month_away',
     watched: row.watched,
     notes: row.notes,
     posterUrl: row.poster_url,
@@ -42,6 +43,7 @@ function draftToRow(draft: MovieDraft) {
     decade: draft.decade.trim() === '' ? null : draft.decade.trim(),
     holiday: draft.holiday,
     rank: draft.rank,
+    watch_window: draft.watchWindow,
     watched: draft.watched,
     notes: draft.notes,
   }
@@ -194,15 +196,45 @@ export function useMovies() {
     )
   }
 
-  async function reorderMovies(orderedIds: string[], movedId?: string) {
+  async function setWatchWindow(id: string, watchWindow: WatchWindow) {
+    const previous = movies
+    setMovies((prev) => prev.map((m) => (m.id === id ? { ...m, watchWindow } : m)))
+
+    const { error: patchError } = await api.patch(`/movies/${id}`, { watch_window: watchWindow })
+    if (patchError) {
+      setMovies(previous)
+      setError(patchError.message)
+      return
+    }
+    setError(null)
+  }
+
+  // Both calendar actions return the holiday's movies with their new slots.
+  async function changeCalendar(holidayId: number, action: 'auto-calculate-calendar' | 'clear-calendar') {
+    const { data, error: postError } = await api.post<MovieRow[]>(`/holidays/${holidayId}/${action}`, {})
+    if (postError || !data) {
+      setError(postError?.message ?? 'Could not update the calendar')
+      return
+    }
+    setError(null)
+    const updated = new Map(data.map(normalizeRow).map(rowToMovie).map((m) => [m.id, m]))
+    setMovies((prev) => prev.map((m) => updated.get(m.id) ?? m))
+  }
+
+  const autoCalculateCalendar = (holidayId: number) => changeCalendar(holidayId, 'auto-calculate-calendar')
+  // Only resets the slots to 'month_away'; never deletes a movie.
+  const clearCalendar = (holidayId: number) => changeCalendar(holidayId, 'clear-calendar')
+
+  async function reorderMovies(orderedIds: string[], movedIds?: string | string[]) {
+    const moved = new Set(movedIds === undefined ? [] : [movedIds].flat())
     const previous = movies
     const rankById = new Map<string, number>()
     let nextRank = 1
     for (const id of orderedIds) {
       const movie = previous.find((m) => m.id === id)
       if (!movie) continue
-      // Only movies that were already ranked (and the one just dragged) take a spot.
-      rankById.set(id, movie.rank < UNRANKED || id === movedId ? nextRank++ : UNRANKED)
+      // Only movies that were already ranked (and the ones just moved or compared) take a spot.
+      rankById.set(id, movie.rank < UNRANKED || moved.has(id) ? nextRank++ : UNRANKED)
     }
     await persistRanks(previous, rankById, previous)
   }
@@ -233,6 +265,9 @@ export function useMovies() {
     updateMovie,
     deleteMovie,
     toggleWatched,
+    setWatchWindow,
+    autoCalculateCalendar,
+    clearCalendar,
     reorderMovies,
     setMovieRank,
   }

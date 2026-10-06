@@ -14,6 +14,7 @@ const baseMovie: Movie = {
   decade: '1990s',
   holiday: 'Halloween',
   rank: 2,
+  watchWindow: 'month_away',
   watched: true,
   notes: 'Annual tradition.',
   cast: ['Bette Midler', 'Sarah Jessica Parker'],

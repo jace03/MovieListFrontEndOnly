@@ -14,6 +14,7 @@ const editingMovie: Movie = {
   decade: '1980s',
   holiday: 'Halloween',
   rank: 100,
+  watchWindow: 'month_away',
   watched: true,
   notes: 'Great movie',
   cast: [],

@@ -367,12 +367,12 @@ textarea {
 }
 
 @media (min-width: 561px) {
-  /* A chosen column count is exact, not a ceiling — cards shrink to fit
-     rather than silently dropping to fewer columns on narrower widths. */
   .movie-list[data-columns='2'] {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
 
+@media (min-width: 1120px) {
   .movie-list[data-columns='3'] {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -537,6 +537,7 @@ textarea {
 
 .tags {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 6px;
 }
@@ -546,6 +547,7 @@ textarea {
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 999px;
+  white-space: nowrap;
   border: 1px solid var(--border);
   color: var(--text-muted);
 }
@@ -694,4 +696,532 @@ textarea {
 .rank-input.rank-taken {
   border-color: #dc2626;
   color: #dc2626;
+}
+
+/* Rank Movies tab */
+
+.rank-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.rank-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@media (min-width: 561px) {
+  .rank-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.rank-card {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  cursor: grab;
+}
+
+.rank-card.dragging {
+  opacity: 0.4;
+}
+
+.rank-card.drop-target {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.rank-poster {
+  width: 100%;
+  aspect-ratio: 2 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+  background: var(--bg);
+  display: block;
+}
+
+.rank-poster-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30px;
+  background: linear-gradient(160deg, var(--accent-secondary), var(--accent));
+}
+
+.rank-card-footer {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.rank-title {
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rank-game {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.rank-game-prompt {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.rank-game-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  width: 100%;
+  max-width: 560px;
+}
+
+.rank-game-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  font: inherit;
+  color: inherit;
+  text-align: center;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.rank-game-card:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.rank-game-card .rank-title {
+  white-space: normal;
+  font-size: 15px;
+}
+
+.rank-game-current {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+/* Compact grid cards (game mode keeps its full-size posters) */
+
+.rank-grid {
+  gap: 8px;
+}
+
+.rank-card {
+  gap: 4px;
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.rank-card .rank-poster {
+  aspect-ratio: auto;
+  height: 84px;
+  object-position: center 20%;
+}
+
+.rank-card .rank-poster-placeholder {
+  font-size: 22px;
+}
+
+.rank-card .rank-title {
+  font-size: 12px;
+}
+
+.rank-card .badge {
+  padding: 1px 7px;
+  font-size: 11px;
+}
+
+.rank-to-bottom {
+  flex: none;
+  margin-left: auto;
+  padding: 0 6px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.rank-to-bottom:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* Confirm dialog */
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(10, 16, 28, 0.55);
+}
+
+.dialog {
+  width: 100%;
+  max-width: 400px;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow-hover);
+}
+
+.dialog-title {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.dialog-message {
+  margin: 0 0 18px;
+  color: var(--text-muted);
+}
+
+.dialog-message strong {
+  color: var(--text);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+/* Calendar tab */
+
+.calendar-pillar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.calendar-row {
+  display: flex;
+  align-items: stretch;
+  gap: 10px;
+  min-width: 0;
+}
+
+.calendar-square-wrap {
+  position: relative;
+  flex: none;
+  width: 120px;
+  height: 120px;
+}
+
+/* A card tucked behind the square: a sliver shows at rest, more on hover. */
+.calendar-peek {
+  position: absolute;
+  display: flex;
+  top: 8px;
+  bottom: 8px;
+  left: 0;
+  width: 130px;
+  /* The nearest card sits on top, the farthest tucks deepest. */
+  z-index: calc(4 - var(--peek-index));
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  transform: translateX(calc(var(--peek-index) * 8px));
+  transition: transform 0.2s ease;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.calendar-peek .calendar-poster {
+  width: 100%;
+}
+
+.calendar-poster {
+  flex: none;
+  width: 68px;
+  height: auto;
+  align-self: stretch;
+  object-fit: cover;
+  display: block;
+  background: var(--bg);
+}
+
+.calendar-poster-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  background: linear-gradient(160deg, var(--accent-secondary), var(--accent));
+}
+
+.calendar-square-wrap:hover .calendar-peek,
+.calendar-square-wrap:focus-within .calendar-peek {
+  transform: translateX(calc(var(--peek-index) * 8px + 22px));
+}
+
+.calendar-square {
+  position: relative;
+  z-index: 5;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px;
+  font: inherit;
+  color: var(--text);
+  text-align: center;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.calendar-square:hover {
+  border-color: var(--accent);
+  transform: translateY(-2px);
+}
+
+.calendar-row.open .calendar-square {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.calendar-square-label {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.calendar-square-count {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.calendar-fold {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  animation: calendar-unfold 0.25s ease-out;
+  transform-origin: left center;
+}
+
+.calendar-fold[hidden] {
+  display: none;
+}
+
+@keyframes calendar-unfold {
+  from {
+    opacity: 0;
+    transform: scaleX(0.2);
+  }
+  to {
+    opacity: 1;
+    transform: scaleX(1);
+  }
+}
+
+.calendar-cards {
+  list-style: none;
+  margin: 0;
+  padding: 2px 2px 8px;
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  width: 100%;
+}
+
+.calendar-card {
+  flex: none;
+  width: 250px;
+  min-height: 108px;
+  display: flex;
+  align-items: stretch;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.calendar-card.watched {
+  opacity: 0.65;
+}
+
+/* The checkbox sits on the edge nearest the square. */
+.calendar-watched {
+  flex: none;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.calendar-watched input {
+  width: 20px;
+  height: 20px;
+  cursor: pointer;
+  accent-color: var(--accent-secondary);
+}
+
+.calendar-card-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px;
+}
+
+.calendar-card-title {
+  font-weight: 600;
+  font-size: 14px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.calendar-card.watched .calendar-card-title {
+  text-decoration: line-through;
+}
+
+.calendar-move {
+  width: 100%;
+  font: inherit;
+  font-size: 12px;
+  padding: 3px 6px;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.calendar-empty {
+  align-self: center;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+@media (max-width: 560px) {
+  .calendar-square-wrap {
+    width: 92px;
+    height: 92px;
+  }
+
+  .calendar-peek {
+    width: 102px;
+  }
+
+  .calendar-square-label {
+    font-size: 14px;
+  }
+
+  .calendar-card {
+    width: 210px;
+    min-height: 92px;
+  }
+
+  .calendar-poster {
+    width: 56px;
+  }
+}
+
+/* Settings tab */
+
+.settings-section h2 {
+  margin: 0 0 4px;
+}
+
+.settings-help {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+}
+
+.settings-card {
+  margin-bottom: 14px;
+}
+
+.settings-card h3 {
+  margin: 0 0 10px;
+}
+
+.settings-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.settings-field input {
+  width: 100%;
+}
+
+.settings-rest {
+  padding: 8px 0;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.settings-status {
+  align-self: center;
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.settings-status.error {
+  color: #dc2626;
+}
+
+.calendar-section .rank-toolbar {
+  align-items: center;
 }
