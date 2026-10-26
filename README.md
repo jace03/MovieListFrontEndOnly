@@ -13,7 +13,7 @@ Data lives in a shared Supabase Postgres table — no login, since it's just the
 
 ## Getting started
 
-1. Copy `.env.example` to `.env.local` and fill in the Supabase publishable key (ask Jace, or find it in the Supabase dashboard under Project Settings -> API Keys). The project URL is already filled in.
+1. Copy `.env.example` to `.env.local` — it already has the shared Supabase URL and publishable key, so no edits needed.
 2. Install and run:
 
 ```bash
