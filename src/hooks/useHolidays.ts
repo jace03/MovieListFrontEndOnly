@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { api } from '../lib/apiClient'
+import { db } from '../lib/db'
 import type { HolidayInfo, SlotCountKey } from '../types'
 
 export function useHolidays() {
@@ -7,7 +7,7 @@ export function useHolidays() {
 
   useEffect(() => {
     let cancelled = false
-    api.get<HolidayInfo[]>('/holidays').then(({ data }) => {
+    db.fetchHolidays().then(({ data }) => {
       if (!cancelled && data) setHolidays(data)
     })
     return () => {
@@ -16,7 +16,7 @@ export function useHolidays() {
   }, [])
 
   async function updateSlotCounts(id: number, counts: Record<SlotCountKey, number>) {
-    const { data, error } = await api.patch<HolidayInfo>(`/holidays/${id}`, counts)
+    const { data, error } = await db.updateHoliday(id, counts)
     if (error || !data) return error?.message ?? 'Could not save settings'
     setHolidays((prev) => prev.map((h) => (h.id === id ? data : h)))
     return null

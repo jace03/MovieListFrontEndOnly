@@ -2,12 +2,19 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor, act } from '@testing-library/react'
 import type { MovieRow } from '../types'
 
-const { api } = vi.hoisted(() => ({
-  api: { get: vi.fn(), post: vi.fn(), put: vi.fn(), patch: vi.fn(), delete: vi.fn() },
+const { db } = vi.hoisted(() => ({
+  db: {
+    fetchMovies: vi.fn(),
+    insertMovie: vi.fn(),
+    updateMovie: vi.fn(),
+    patchMovie: vi.fn(),
+    deleteMovie: vi.fn(),
+    changeCalendar: vi.fn(),
+  },
 }))
 const { fetchPosterUrl } = vi.hoisted(() => ({ fetchPosterUrl: vi.fn() }))
 
-vi.mock('../lib/apiClient', () => ({ api }))
+vi.mock('../lib/db', () => ({ db }))
 vi.mock('../lib/tmdb', () => ({ fetchPosterUrl }))
 
 const { useMovies } = await import('./useMovies')
@@ -39,18 +46,14 @@ const row: MovieRow = {
 }
 
 beforeEach(() => {
-  api.get.mockReset()
-  api.post.mockReset()
-  api.put.mockReset()
-  api.patch.mockReset()
-  api.delete.mockReset()
+  Object.values(db).forEach((fn) => fn.mockReset())
   fetchPosterUrl.mockReset()
   fetchPosterUrl.mockResolvedValue(null)
 })
 
 describe('useMovies', () => {
   it('loads movies on mount, maps rows, and sorts cast names', async () => {
-    api.get.mockResolvedValue(ok([row]))
+    db.fetchMovies.mockResolvedValue(ok([row]))
     const { result } = renderHook(() => useMovies())
     expect(result.current.loading).toBe(true)
 
@@ -78,7 +81,7 @@ describe('useMovies', () => {
 
   it('falls back to empty strings for null year/genre/decade and an empty cast array', async () => {
     const bareRow: MovieRow = { ...row, year: null, genre: null, decade: null, movie_actor: [] }
-    api.get.mockResolvedValue(ok([bareRow]))
+    db.fetchMovies.mockResolvedValue(ok([bareRow]))
     const { result } = renderHook(() => useMovies())
 
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -86,7 +89,7 @@ describe('useMovies', () => {
   })
 
   it('sets an error message when the initial fetch fails', async () => {
-    api.get.mockResolvedValue(fail('network down'))
+    db.fetchMovies.mockResolvedValue(fail('network down'))
     const { result } = renderHook(() => useMovies())
 
     await waitFor(() => expect(result.current.loading).toBe(false))
@@ -95,11 +98,11 @@ describe('useMovies', () => {
   })
 
   it('addMovie appends the newly inserted movie on success', async () => {
-    api.get.mockResolvedValue(ok([]))
+    db.fetchMovies.mockResolvedValue(ok([]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.post.mockResolvedValue(ok(row))
+    db.insertMovie.mockResolvedValue(ok(row))
     await act(async () => {
       await result.current.addMovie({
         title: 'Hocus Pocus',
@@ -122,11 +125,11 @@ describe('useMovies', () => {
   })
 
   it('addMovie sets an error and leaves the list unchanged on failure', async () => {
-    api.get.mockResolvedValue(ok([]))
+    db.fetchMovies.mockResolvedValue(ok([]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.post.mockResolvedValue(fail('insert failed'))
+    db.insertMovie.mockResolvedValue(fail('insert failed'))
     await act(async () => {
       await result.current.addMovie({
         title: 'Bad Movie',
@@ -148,11 +151,11 @@ describe('useMovies', () => {
   })
 
   it('updateMovie applies the server response without shifting ranks for a normal edit', async () => {
-    api.get.mockResolvedValue(ok([row]))
+    db.fetchMovies.mockResolvedValue(ok([row]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.put.mockResolvedValue(ok({ ...row, title: 'New Title' }))
+    db.updateMovie.mockResolvedValue(ok({ ...row, title: 'New Title' }))
     await act(async () => {
       await result.current.updateMovie('1', {
         title: 'New Title',
@@ -169,7 +172,7 @@ describe('useMovies', () => {
       })
     })
 
-    expect(api.put).toHaveBeenCalledTimes(1)
+    expect(db.updateMovie).toHaveBeenCalledTimes(1)
     expect(result.current.movies[0].title).toBe('New Title')
     expect(result.current.error).toBeNull()
   })
@@ -178,12 +181,12 @@ describe('useMovies', () => {
     const rowA: MovieRow = { ...row, id: 'a', rank: 1 }
     const rowB: MovieRow = { ...row, id: 'b', rank: 2 }
     const rowC: MovieRow = { ...row, id: 'c', rank: 3 }
-    api.get.mockResolvedValue(ok([rowA, rowB, rowC]))
+    db.fetchMovies.mockResolvedValue(ok([rowA, rowB, rowC]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.put.mockResolvedValue(ok({ ...rowA, rank: 100 }))
-    api.patch.mockResolvedValue(ok(undefined))
+    db.updateMovie.mockResolvedValue(ok({ ...rowA, rank: 100 }))
+    db.patchMovie.mockResolvedValue(ok(undefined))
 
     await act(async () => {
       await result.current.updateMovie('a', {
@@ -203,17 +206,17 @@ describe('useMovies', () => {
 
     const ranks = Object.fromEntries(result.current.movies.map((m) => [m.id, m.rank]))
     expect(ranks).toEqual({ a: 100, b: 1, c: 2 })
-    expect(api.patch).toHaveBeenCalledWith('/movies/b', { rank: 1 })
-    expect(api.patch).toHaveBeenCalledWith('/movies/c', { rank: 2 })
+    expect(db.patchMovie).toHaveBeenCalledWith('b', { rank: 1 })
+    expect(db.patchMovie).toHaveBeenCalledWith('c', { rank: 2 })
     expect(result.current.error).toBeNull()
   })
 
   it('deleteMovie removes the movie from state on success', async () => {
-    api.get.mockResolvedValue(ok([row]))
+    db.fetchMovies.mockResolvedValue(ok([row]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.delete.mockResolvedValue(ok(undefined))
+    db.deleteMovie.mockResolvedValue(ok(undefined))
     await act(async () => {
       await result.current.deleteMovie('1')
     })
@@ -225,12 +228,12 @@ describe('useMovies', () => {
     const rowA: MovieRow = { ...row, id: 'a', rank: 1 }
     const rowB: MovieRow = { ...row, id: 'b', rank: 2 }
     const rowC: MovieRow = { ...row, id: 'c', rank: 3 }
-    api.get.mockResolvedValue(ok([rowA, rowB, rowC]))
+    db.fetchMovies.mockResolvedValue(ok([rowA, rowB, rowC]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.delete.mockResolvedValue(ok(undefined))
-    api.patch.mockResolvedValue(ok(undefined))
+    db.deleteMovie.mockResolvedValue(ok(undefined))
+    db.patchMovie.mockResolvedValue(ok(undefined))
 
     await act(async () => {
       await result.current.deleteMovie('a')
@@ -238,19 +241,19 @@ describe('useMovies', () => {
 
     const ranks = Object.fromEntries(result.current.movies.map((m) => [m.id, m.rank]))
     expect(ranks).toEqual({ b: 1, c: 2 })
-    expect(api.patch).toHaveBeenCalledWith('/movies/b', { rank: 1 })
-    expect(api.patch).toHaveBeenCalledWith('/movies/c', { rank: 2 })
+    expect(db.patchMovie).toHaveBeenCalledWith('b', { rank: 1 })
+    expect(db.patchMovie).toHaveBeenCalledWith('c', { rank: 2 })
     expect(result.current.error).toBeNull()
   })
 
   it('deleteMovie does not shift ranks when the deleted movie was unranked', async () => {
     const rowA: MovieRow = { ...row, id: 'a', rank: 1 }
     const rowB: MovieRow = { ...row, id: 'b', rank: 100 }
-    api.get.mockResolvedValue(ok([rowA, rowB]))
+    db.fetchMovies.mockResolvedValue(ok([rowA, rowB]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.delete.mockResolvedValue(ok(undefined))
+    db.deleteMovie.mockResolvedValue(ok(undefined))
     await act(async () => {
       await result.current.deleteMovie('b')
     })
@@ -261,12 +264,12 @@ describe('useMovies', () => {
   it('deleteMovie surfaces an error and re-fetches if closing the rank gap fails to persist', async () => {
     const rowA: MovieRow = { ...row, id: 'a', rank: 1 }
     const rowB: MovieRow = { ...row, id: 'b', rank: 2 }
-    api.get.mockResolvedValueOnce(ok([rowA, rowB])).mockResolvedValueOnce(ok([rowB]))
+    db.fetchMovies.mockResolvedValueOnce(ok([rowA, rowB])).mockResolvedValueOnce(ok([rowB]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.delete.mockResolvedValue(ok(undefined))
-    api.patch.mockResolvedValue(fail('update failed'))
+    db.deleteMovie.mockResolvedValue(ok(undefined))
+    db.patchMovie.mockResolvedValue(fail('update failed'))
 
     await act(async () => {
       await result.current.deleteMovie('a')
@@ -277,11 +280,11 @@ describe('useMovies', () => {
   })
 
   it('toggleWatched flips the watched flag returned by the server', async () => {
-    api.get.mockResolvedValue(ok([row]))
+    db.fetchMovies.mockResolvedValue(ok([row]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.patch.mockResolvedValue(ok({ ...row, watched: false }))
+    db.patchMovie.mockResolvedValue(ok({ ...row, watched: false }))
     await act(async () => {
       await result.current.toggleWatched('1')
     })
@@ -290,26 +293,26 @@ describe('useMovies', () => {
   })
 
   it('toggleWatched is a no-op for an unknown id', async () => {
-    api.get.mockResolvedValue(ok([row]))
+    db.fetchMovies.mockResolvedValue(ok([row]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.patch.mockClear()
+    db.patchMovie.mockClear()
     await act(async () => {
       await result.current.toggleWatched('does-not-exist')
     })
 
-    expect(api.patch).not.toHaveBeenCalled()
+    expect(db.patchMovie).not.toHaveBeenCalled()
   })
 
   it('reorderMovies recomputes sequential ranks and persists them per-row', async () => {
     const rowA: MovieRow = { ...row, id: 'a', rank: 1 }
     const rowB: MovieRow = { ...row, id: 'b', rank: 2 }
-    api.get.mockResolvedValue(ok([rowA, rowB]))
+    db.fetchMovies.mockResolvedValue(ok([rowA, rowB]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.patch.mockResolvedValue(ok(undefined))
+    db.patchMovie.mockResolvedValue(ok(undefined))
     await act(async () => {
       await result.current.reorderMovies(['b', 'a'])
     })
@@ -317,19 +320,19 @@ describe('useMovies', () => {
     expect(result.current.movies.map((m) => m.id)).toEqual(['b', 'a'])
     expect(result.current.movies[0].rank).toBe(1)
     expect(result.current.movies[1].rank).toBe(2)
-    expect(api.patch).toHaveBeenCalledWith('/movies/b', { rank: 1 })
-    expect(api.patch).toHaveBeenCalledWith('/movies/a', { rank: 2 })
+    expect(db.patchMovie).toHaveBeenCalledWith('b', { rank: 1 })
+    expect(db.patchMovie).toHaveBeenCalledWith('a', { rank: 2 })
     expect(result.current.error).toBeNull()
   })
 
   it('reorderMovies reverts to the previous order and sets an error if a persist call fails', async () => {
     const rowA: MovieRow = { ...row, id: 'a', rank: 1 }
     const rowB: MovieRow = { ...row, id: 'b', rank: 2 }
-    api.get.mockResolvedValue(ok([rowA, rowB]))
+    db.fetchMovies.mockResolvedValue(ok([rowA, rowB]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.patch.mockResolvedValueOnce(ok(undefined)).mockResolvedValueOnce(fail('update failed'))
+    db.patchMovie.mockResolvedValueOnce(ok(undefined)).mockResolvedValueOnce(fail('update failed'))
 
     await act(async () => {
       await result.current.reorderMovies(['b', 'a'])
@@ -344,11 +347,11 @@ describe('useMovies', () => {
       { ...row, id: 'b', rank: 2 },
       { ...row, id: 'c', rank: 3 },
     ]
-    api.get.mockResolvedValue(ok(rows))
+    db.fetchMovies.mockResolvedValue(ok(rows))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.patch.mockResolvedValue(ok(undefined))
+    db.patchMovie.mockResolvedValue(ok(undefined))
     await act(async () => {
       await result.current.setMovieRank('c', 1)
     })
@@ -358,7 +361,7 @@ describe('useMovies', () => {
       ['a', 2],
       ['b', 3],
     ])
-    expect(api.patch).toHaveBeenCalledTimes(3)
+    expect(db.patchMovie).toHaveBeenCalledTimes(3)
   })
 
   it('setMovieRank ranks an unranked movie and clamps to the end of the list', async () => {
@@ -366,11 +369,11 @@ describe('useMovies', () => {
       { ...row, id: 'a', rank: 1 },
       { ...row, id: 'b', rank: 100 },
     ]
-    api.get.mockResolvedValue(ok(rows))
+    db.fetchMovies.mockResolvedValue(ok(rows))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.patch.mockResolvedValue(ok(undefined))
+    db.patchMovie.mockResolvedValue(ok(undefined))
     await act(async () => {
       await result.current.setMovieRank('b', 99)
     })
@@ -379,8 +382,8 @@ describe('useMovies', () => {
       ['a', 1],
       ['b', 2],
     ])
-    expect(api.patch).toHaveBeenCalledTimes(1)
-    expect(api.patch).toHaveBeenCalledWith('/movies/b', { rank: 2 })
+    expect(db.patchMovie).toHaveBeenCalledTimes(1)
+    expect(db.patchMovie).toHaveBeenCalledWith('b', { rank: 2 })
   })
   it('setMovieRank with 100 unranks the movie and closes the gap without touching other unranked movies', async () => {
     const rows: MovieRow[] = [
@@ -388,11 +391,11 @@ describe('useMovies', () => {
       { ...row, id: 'b', rank: 2 },
       { ...row, id: 'c', rank: 100 },
     ]
-    api.get.mockResolvedValue(ok(rows))
+    db.fetchMovies.mockResolvedValue(ok(rows))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.patch.mockResolvedValue(ok(undefined))
+    db.patchMovie.mockResolvedValue(ok(undefined))
     await act(async () => {
       await result.current.setMovieRank('a', 100)
     })
@@ -402,7 +405,7 @@ describe('useMovies', () => {
       ['a', 100],
       ['c', 100],
     ])
-    expect(api.patch).toHaveBeenCalledTimes(2)
+    expect(db.patchMovie).toHaveBeenCalledTimes(2)
   })
 
   it('reorderMovies ranks the dragged unranked movie but leaves other unranked movies at 100', async () => {
@@ -411,11 +414,11 @@ describe('useMovies', () => {
       { ...row, id: 'b', rank: 100 },
       { ...row, id: 'c', rank: 100 },
     ]
-    api.get.mockResolvedValue(ok(rows))
+    db.fetchMovies.mockResolvedValue(ok(rows))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.patch.mockResolvedValue(ok(undefined))
+    db.patchMovie.mockResolvedValue(ok(undefined))
     await act(async () => {
       await result.current.reorderMovies(['b', 'a', 'c'], 'b')
     })
@@ -428,25 +431,25 @@ describe('useMovies', () => {
   })
 
   it('setWatchWindow moves the movie right away and saves it', async () => {
-    api.get.mockResolvedValue(ok([row]))
+    db.fetchMovies.mockResolvedValue(ok([row]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.patch.mockResolvedValue(ok({ ...row, watch_window: 'day_of' }))
+    db.patchMovie.mockResolvedValue(ok({ ...row, watch_window: 'day_of' }))
     await act(async () => {
       await result.current.setWatchWindow('1', 'day_of')
     })
 
-    expect(api.patch).toHaveBeenCalledWith('/movies/1', { watch_window: 'day_of' })
+    expect(db.patchMovie).toHaveBeenCalledWith('1', { watch_window: 'day_of' })
     expect(result.current.movies[0].watchWindow).toBe('day_of')
   })
 
   it('setWatchWindow reverts and reports the error when saving fails', async () => {
-    api.get.mockResolvedValue(ok([row]))
+    db.fetchMovies.mockResolvedValue(ok([row]))
     const { result } = renderHook(() => useMovies())
     await waitFor(() => expect(result.current.loading).toBe(false))
 
-    api.patch.mockResolvedValue(fail('nope'))
+    db.patchMovie.mockResolvedValue(fail('nope'))
     await act(async () => {
       await result.current.setWatchWindow('1', 'day_of')
     })

@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
-import { api } from '../lib/apiClient'
+import { db, type CalendarAction } from '../lib/db'
 import { fetchPosterUrl } from '../lib/tmdb'
 import { UNRANKED, type Movie, type MovieDraft, type MovieRow, type WatchWindow } from '../types'
 
 function byRank(a: Movie, b: Movie) {
   return a.rank - b.rank
-}
-
-function normalizeRow(row: MovieRow): MovieRow {
-  return { ...row, id: String(row.id) }
 }
 
 function rowToMovie(row: MovieRow): Movie {
@@ -56,13 +52,13 @@ export function useMovies() {
 
   const refresh = useCallback(async () => {
     setLoading(true)
-    const { data, error: fetchError } = await api.get<MovieRow[]>('/movies')
+    const { data, error: fetchError } = await db.fetchMovies()
 
     if (fetchError) {
       setError(fetchError.message)
     } else {
       setError(null)
-      setMovies((data ?? []).map(normalizeRow).map(rowToMovie).sort(byRank))
+      setMovies((data ?? []).map(rowToMovie).sort(byRank))
     }
     setLoading(false)
   }, [])
@@ -92,7 +88,7 @@ export function useMovies() {
     }
 
     const results = await Promise.all(
-      changed.map((m) => api.patch(`/movies/${m.id}`, { rank: rankById.get(m.id) })),
+      changed.map((m) => db.patchMovie(m.id, { rank: rankById.get(m.id)! })),
     )
     const failed = results.find((r) => r.error)
     if (failed?.error) {
@@ -117,7 +113,7 @@ export function useMovies() {
 
   async function addMovie(draft: MovieDraft) {
     const posterUrl = draft.posterUrl?.trim() || (await fetchPosterUrl(draft.title, draft.year))
-    const { data, error: insertError } = await api.post<MovieRow>('/movies', {
+    const { data, error: insertError } = await db.insertMovie({
       ...draftToRow(draft),
       poster_url: posterUrl,
     })
@@ -127,7 +123,7 @@ export function useMovies() {
       return
     }
     setError(null)
-    setMovies((prev) => [...prev, rowToMovie(normalizeRow(data as MovieRow))].sort(byRank))
+    setMovies((prev) => [...prev, rowToMovie(data as MovieRow)].sort(byRank))
   }
 
   async function updateMovie(id: string, draft: MovieDraft) {
@@ -138,7 +134,7 @@ export function useMovies() {
     const posterUrl =
       manualPoster ||
       (titleChanged || posterCleared ? await fetchPosterUrl(draft.title, draft.year) : previous?.posterUrl)
-    const { data, error: updateError } = await api.put<MovieRow>(`/movies/${id}`, {
+    const { data, error: updateError } = await db.updateMovie(id, {
       ...draftToRow(draft),
       poster_url: posterUrl,
     })
@@ -148,7 +144,7 @@ export function useMovies() {
       return
     }
 
-    const updated = rowToMovie(normalizeRow(data as MovieRow))
+    const updated = rowToMovie(data as MovieRow)
     const nextMovies = movies.map((m) => (m.id === id ? updated : m)).sort(byRank)
 
     if (previous && previous.rank < UNRANKED && updated.rank >= UNRANKED) {
@@ -162,7 +158,7 @@ export function useMovies() {
 
   async function deleteMovie(id: string) {
     const target = movies.find((m) => m.id === id)
-    const { error: deleteError } = await api.delete(`/movies/${id}`)
+    const { error: deleteError } = await db.deleteMovie(id)
 
     if (deleteError) {
       setError(deleteError.message)
@@ -184,7 +180,7 @@ export function useMovies() {
     const movie = movies.find((m) => m.id === id)
     if (!movie) return
 
-    const { data, error: updateError } = await api.patch<MovieRow>(`/movies/${id}/toggle-watched`)
+    const { data, error: updateError } = await db.patchMovie(id, { watched: !movie.watched })
 
     if (updateError) {
       setError(updateError.message)
@@ -192,7 +188,7 @@ export function useMovies() {
     }
     setError(null)
     setMovies((prev) =>
-      prev.map((m) => (m.id === id ? rowToMovie(normalizeRow(data as MovieRow)) : m)),
+      prev.map((m) => (m.id === id ? rowToMovie(data as MovieRow) : m)),
     )
   }
 
@@ -200,7 +196,7 @@ export function useMovies() {
     const previous = movies
     setMovies((prev) => prev.map((m) => (m.id === id ? { ...m, watchWindow } : m)))
 
-    const { error: patchError } = await api.patch(`/movies/${id}`, { watch_window: watchWindow })
+    const { error: patchError } = await db.patchMovie(id, { watch_window: watchWindow })
     if (patchError) {
       setMovies(previous)
       setError(patchError.message)
@@ -210,20 +206,20 @@ export function useMovies() {
   }
 
   // Both calendar actions return the holiday's movies with their new slots.
-  async function changeCalendar(holidayId: number, action: 'auto-calculate-calendar' | 'clear-calendar') {
-    const { data, error: postError } = await api.post<MovieRow[]>(`/holidays/${holidayId}/${action}`, {})
+  async function changeCalendar(holidayId: number, action: CalendarAction) {
+    const { data, error: postError } = await db.changeCalendar(holidayId, action)
     if (postError || !data) {
       setError(postError?.message ?? 'Could not update the calendar')
       return
     }
     setError(null)
-    const updated = new Map(data.map(normalizeRow).map(rowToMovie).map((m) => [m.id, m]))
+    const updated = new Map(data.map(rowToMovie).map((m) => [m.id, m]))
     setMovies((prev) => prev.map((m) => updated.get(m.id) ?? m))
   }
 
-  const autoCalculateCalendar = (holidayId: number) => changeCalendar(holidayId, 'auto-calculate-calendar')
+  const autoCalculateCalendar = (holidayId: number) => changeCalendar(holidayId, 'auto_calculate_calendar')
   // Only resets the slots to 'month_away'; never deletes a movie.
-  const clearCalendar = (holidayId: number) => changeCalendar(holidayId, 'clear-calendar')
+  const clearCalendar = (holidayId: number) => changeCalendar(holidayId, 'clear_calendar')
 
   async function reorderMovies(orderedIds: string[], movedIds?: string | string[]) {
     const moved = new Set(movedIds === undefined ? [] : [movedIds].flat())
